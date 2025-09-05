@@ -1,0 +1,16 @@
+name: Send Appointment Reminders
+
+on:
+  schedule:
+    - cron: "0 * * * *"   # runs every hour on the hour (UTC)
+  workflow_dispatch:       # allows manual run from GitHub UI
+
+jobs:
+  call-function:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call Supabase Reminder Function
+        run: |
+          curl -X POST \
+            https://pxwyzxwdqiwzpnbiupmd.functions.supabase.co/send-reminders \
+            -H "Content-Type: application/json"
