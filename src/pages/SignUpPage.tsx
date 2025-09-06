@@ -126,14 +126,15 @@ export default function SignUpPage() {
     }
 
 
-    // 4. Seed default services
+    // 4. Seed default services (generic names, works for any provider)
     await supabase.from("services").insert([
       {
         provider_id: userId,
-        name: "Chiropractic Treatment",
+        name: "Treatment",
         duration_minutes: 30,
         is_active: true,
         type: "established",
+        default_for: "established",
       },
       {
         provider_id: userId,
@@ -141,6 +142,7 @@ export default function SignUpPage() {
         duration_minutes: 60,
         is_active: true,
         type: "new",
+        default_for: "new",
       },
     ]);
 

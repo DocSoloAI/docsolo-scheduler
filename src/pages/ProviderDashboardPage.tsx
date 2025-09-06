@@ -17,6 +17,11 @@ export default function ProviderSettingsPage() {
   const [servicesDirty, setServicesDirty] = useState(false);
   const [providerId, setProviderId] = useState<string | null>(null);
   const [providerEmail, setProviderEmail] = useState<string | null>(null);
+  const [officeName, setOfficeName] = useState<string>("");
+  
+  useEffect(() => {
+    document.title = `${officeName || "DocSoloScheduler"} – Dashboard`;
+  }, [officeName]);
 
   const navigate = useNavigate();
 
@@ -30,6 +35,17 @@ export default function ProviderSettingsPage() {
       if (user) {
         setProviderId(user.id);
         setProviderEmail(user.email ?? null);
+
+        // Fetch office_name from providers table
+        const { data: providerRow, error } = await supabase
+          .from("providers")
+          .select("office_name")
+          .eq("id", user.id)
+          .single();
+
+        if (!error && providerRow) {
+          setOfficeName(providerRow.office_name || "");
+        }
       }
     };
 
@@ -52,7 +68,9 @@ export default function ProviderSettingsPage() {
   return (
     <div className="max-w-6xl mx-auto py-10 px-4">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold text-gray-800">Provider Dashboard</h1>
+        <h1 className="text-3xl font-bold text-gray-800">
+          {officeName || "Provider Dashboard"}
+        </h1>
         <div className="flex flex-col items-end">
           {providerEmail && (
             <span className="text-sm text-gray-600 mb-1">{providerEmail}</span>

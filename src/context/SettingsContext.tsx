@@ -4,7 +4,7 @@ import { supabase } from "@/lib/supabaseClient";
 
 interface SettingsContextType {
   services: any[];
-  availability: any[];  // ✅ renamed
+  availability: any[];
   patients: any[];
   appointments: any[];
   loading: boolean;
@@ -13,7 +13,13 @@ interface SettingsContextType {
 
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
 
-export function SettingsProvider({ providerId, children }: { providerId: string; children: React.ReactNode }) {
+export function SettingsProvider({
+  providerId,
+  children,
+}: {
+  providerId: string;
+  children: React.ReactNode;
+}) {
   const [services, setServices] = useState<any[]>([]);
   const [availability, setAvailability] = useState<any[]>([]);
   const [patients, setPatients] = useState<any[]>([]);
@@ -24,10 +30,22 @@ export function SettingsProvider({ providerId, children }: { providerId: string;
     setLoading(true);
 
     const [svcRes, availRes, patRes, apptRes] = await Promise.all([
-      supabase.from("services").select("id, name, duration_minutes").eq("provider_id", providerId),
-      supabase.from("availability").select("*").eq("provider_id", providerId),   // ✅ fixed
+      supabase
+        .from("services")
+        .select("id, provider_id, name, duration_minutes, is_active, default_for")
+        .eq("provider_id", providerId),
+
+      supabase
+        .from("availability")
+        .select("*")
+        .eq("provider_id", providerId),
+
       supabase.from("patients").select("id, first_name, last_name, email"),
-      supabase.from("appointments").select(`
+
+      supabase
+        .from("appointments")
+        .select(
+          `
         id,
         start_time,
         end_time,
@@ -35,7 +53,9 @@ export function SettingsProvider({ providerId, children }: { providerId: string;
         patient_id,
         status,
         patients:patient_id (first_name, last_name)
-      `).eq("provider_id", providerId),
+      `
+        )
+        .eq("provider_id", providerId),
     ]);
 
     if (svcRes.data) setServices(svcRes.data);
@@ -51,7 +71,16 @@ export function SettingsProvider({ providerId, children }: { providerId: string;
   }, [providerId]);
 
   return (
-    <SettingsContext.Provider value={{ services, availability, patients, appointments, loading, reload: loadAll }}>
+    <SettingsContext.Provider
+      value={{
+        services,
+        availability,
+        patients,
+        appointments,
+        loading,
+        reload: loadAll,
+      }}
+    >
       {children}
     </SettingsContext.Provider>
   );
@@ -59,6 +88,7 @@ export function SettingsProvider({ providerId, children }: { providerId: string;
 
 export function useSettings() {
   const ctx = useContext(SettingsContext);
-  if (!ctx) throw new Error("useSettings must be used inside <SettingsProvider>");
+  if (!ctx)
+    throw new Error("useSettings must be used inside <SettingsProvider>");
   return ctx;
 }

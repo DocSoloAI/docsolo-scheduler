@@ -11,11 +11,17 @@ import type { Patient, Service } from "@/types";
 import { sendTemplatedEmail } from "@/lib/email/sendTemplatedEmail"; // 📩 you created this
 import { resend } from "@/lib/resend";
 import { getSubdomain } from "@/lib/getSubdomain";
+
 export default function BookingPage() {
   const [providerId, setProviderId] = useState<string | null>(null);
   const [services, setServices] = useState<Service[]>([]);
   const [providerEmail, setProviderEmail] = useState<string | null>(null);
 
+  const [providerOfficeName, setProviderOfficeName] = useState<string>("");
+
+  useEffect(() => {
+    document.title = `${providerOfficeName || "Booking"} – Appointment`;
+  }, [providerOfficeName]);
 
   useEffect(() => {
     const loadProvider = async () => {
@@ -24,7 +30,7 @@ export default function BookingPage() {
 
       const { data: provider, error } = await supabase
         .from("providers")
-        .select("id, email")
+        .select("id, email, office_name")
         .eq("subdomain", subdomain)
         .single();
 
@@ -35,11 +41,12 @@ export default function BookingPage() {
 
       setProviderId(provider.id);
       setProviderEmail(provider.email);
+      setProviderOfficeName(provider.office_name || "");
 
-      // Fetch services for this provider
+      // ✅ Fetch services too (moved here)
       const { data: svcData, error: svcError } = await supabase
         .from("services")
-        .select("id, provider_id, name, description, duration_min, is_active, default_for")
+        .select("id, provider_id, name, description, duration_minutes, is_active, default_for")
         .eq("provider_id", provider.id)
         .eq("is_active", true);
 
@@ -52,7 +59,6 @@ export default function BookingPage() {
 
     loadProvider();
   }, []);
-
 
   const [patientType, setPatientType] = useState<"established" | "new" | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>();
@@ -81,7 +87,93 @@ export default function BookingPage() {
   const [allowText, setAllowText] = useState(false);
   const [formError, setFormError] = useState("");
 
-  const availableTimes = ["9:30 AM", "11:00 AM", "2:00 PM", "4:15 PM"];
+  const [availableTimes, setAvailableTimes] = useState<string[]>([]);
+
+  useEffect(() => {
+    const loadAvailability = async () => {
+      if (!providerId || !selectedDate) return;
+
+      const dayOfWeek = selectedDate.getDay(); // 0=Sunday ... 6=Saturday
+
+      const { data: avail, error } = await supabase
+        .from("availability")
+        .select("start_time, end_time, slot_interval")
+        .eq("provider_id", providerId)
+        .eq("day_of_week", dayOfWeek)
+        .eq("is_active", true)
+        .single();
+
+      console.log("availability query result:", {
+        avail,
+        error,
+        providerId,
+        dayOfWeek,
+        selectedDate,
+      });
+
+      // if no availability row, bail out early
+      if (!avail) {
+        setAvailableTimes([]);
+        return;
+      }
+
+      // build slots
+      const start = new Date(selectedDate);
+      const [sh, sm] = (avail.start_time as string).split(":").map(Number);
+      start.setHours(sh, sm, 0, 0);
+
+      const end = new Date(selectedDate);
+      const [eh, em] = (avail.end_time as string).split(":").map(Number);
+      end.setHours(eh, em, 0, 0);
+
+      const step = avail.slot_interval || 30;
+
+      // collect all slots first
+      const allSlots: { time: string; date: Date }[] = [];
+      const cur = new Date(start);
+      while (cur < end) {
+        allSlots.push({ time: format(cur, "h:mm a"), date: new Date(cur) });
+        cur.setMinutes(cur.getMinutes() + step);
+      }
+
+      // fetch appointments for that day
+      const startOfDay = new Date(selectedDate);
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(selectedDate);
+      endOfDay.setHours(23, 59, 59, 999);
+
+      const { data: appts, error: apptError } = await supabase
+        .from("appointments")
+        .select("start_time, end_time, status")
+        .eq("provider_id", providerId)
+        .in("status", ["booked", "time_off"])
+        .gte("start_time", startOfDay.toISOString())
+        .lte("end_time", endOfDay.toISOString());
+
+      if (apptError) {
+        console.error("Error loading appointments:", apptError);
+      }
+
+      // filter out slots that overlap with appointments
+      const bookedSlots = (appts || []).map((a) => ({
+        start: new Date(a.start_time),
+        end: new Date(a.end_time),
+      }));
+
+      const freeSlots = allSlots.filter((slot) => {
+        return !bookedSlots.some(
+          (b) => slot.date >= b.start && slot.date < b.end
+        );
+      });
+
+      // save
+      setAvailableTimes(freeSlots.map((s) => s.time));
+
+
+    };
+
+    loadAvailability();
+  }, [providerId, selectedDate]);
 
   const confirmRef = useRef<HTMLDivElement>(null);
   const timeRef = useRef<HTMLDivElement>(null);  // 👈 add this line
@@ -182,13 +274,13 @@ export default function BookingPage() {
       // Look up service duration
       const { data: serviceData, error: serviceError } = await supabase
         .from("services")
-        .select("duration_min")
+        .select("duration_minutes")
         .eq("id", serviceId)
         .single();
 
       if (serviceError) throw serviceError;
 
-      const durationMin = serviceData.duration_min;
+      const durationMin = serviceData.duration_minutes;
 
       // Parse the chosen time into a Date on the selectedDate
       const start = parse(
@@ -265,8 +357,9 @@ export default function BookingPage() {
   return (
     <div className="max-w-3xl mx-auto p-8 min-h-screen bg-gradient-to-br from-gray-50 to-slate-100">
       <h1 className="text-4xl font-extrabold text-blue-700 mb-10 text-center">
-        DocSoloScheduler 🚀
+        {providerOfficeName || "Booking Page"}
       </h1>
+
 
       {/* WHO’S BOOKING TODAY */}
       <motion.div
@@ -331,12 +424,19 @@ export default function BookingPage() {
             <CardContent className="p-6">
               <div className="grid md:grid-cols-2 gap-6">
                 {/* Calendar on the left */}
-                <Calendar
-                  mode="single"
-                  selected={selectedDate}
-                  onSelect={setSelectedDate}
-                  disabled={{ before: new Date() }}
-                />
+                <div>
+                  {serviceDescription && (
+                    <div className="mb-4 text-gray-600 text-sm">
+                      <p>{serviceDescription}</p>
+                    </div>
+                  )}
+                  <Calendar
+                    mode="single"
+                    selected={selectedDate}
+                    onSelect={setSelectedDate}
+                    disabled={{ before: new Date() }}
+                  />
+                </div>
 
                 {/* Times on the right (desktop) or below (mobile) */}
                 {selectedDate && (

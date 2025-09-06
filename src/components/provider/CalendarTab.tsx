@@ -9,6 +9,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -48,6 +49,19 @@ const sendAppointmentEmail = async (
   appointmentId: string,
   providerId: string
 ) => {
+  // Skip emails for time-off blocks
+  const { data: check } = await supabase
+    .from("appointments")
+    .select("status")
+    .eq("id", appointmentId)
+    .single();
+
+  if (check?.status === "time_off") {
+    console.log("⏭️ Skipping email for time-off block");
+    return;
+  }
+
+
   // fetch appointment with patient + service
   const { data: appointment, error: apptError } = await supabase
     .from("appointments")
@@ -161,7 +175,7 @@ export default function CalendarTab({ providerId }: { providerId: string }) {
       const patient = Array.isArray(a.patients) ? a.patients[0] : a.patients;
       const serviceIndex = services.findIndex((s) => s.id === a.service_id);
       const color =
-        a.status === "off"
+        a.status === "time_off"
           ? "#9ca3af"
           : serviceIndex >= 0
           ? colorPalette[serviceIndex % colorPalette.length]
@@ -170,7 +184,7 @@ export default function CalendarTab({ providerId }: { providerId: string }) {
       return {
         id: a.id,
         title:
-          a.status === "off"
+          a.status === "time_off"
             ? "OFF"
             : `${patient?.first_name ?? ""} ${patient?.last_name ?? ""}`.trim(),
         start: a.start_time,
@@ -222,7 +236,7 @@ export default function CalendarTab({ providerId }: { providerId: string }) {
       (new Date(event.endStr).getTime() - new Date(event.startStr).getTime()) /
         60000
     );
-    setIsTimeOff(event.extendedProps.status === "off");
+    setIsTimeOff(event.extendedProps.status === "time_off");
     setModalOpen(true);
   };
 
@@ -255,7 +269,7 @@ export default function CalendarTab({ providerId }: { providerId: string }) {
         .update({
           start_time: start.toISOString(),
           end_time: end.toISOString(),
-          status: isTimeOff ? "off" : "booked",
+          status: isTimeOff ? "time_off" : "booked",
           patient_id: isTimeOff ? null : selectedPatient,
           service_id: isTimeOff ? null : selectedService,
         })
@@ -269,7 +283,11 @@ export default function CalendarTab({ providerId }: { providerId: string }) {
 
       reload();
       resetForm();
-      await sendAppointmentEmail("update", editingEvent.id, providerId);
+
+      // ✅ Only send emails for real appointments
+      if (!isTimeOff) {
+        await sendAppointmentEmail("update", editingEvent.id, providerId);
+      }
       return;
     }
 
@@ -278,7 +296,7 @@ export default function CalendarTab({ providerId }: { providerId: string }) {
       provider_id: providerId,
       start_time: start.toISOString(),
       end_time: end.toISOString(),
-      status: isTimeOff ? "off" : "booked",
+      status: isTimeOff ? "time_off" : "booked",
       patient_id: isTimeOff ? null : selectedPatient,
       service_id: isTimeOff ? null : selectedService,
     };
@@ -286,7 +304,7 @@ export default function CalendarTab({ providerId }: { providerId: string }) {
     const { data: newAppt, error } = await supabase
       .from("appointments")
       .insert(insertData)
-      .select("id")
+      .select("id, status")
       .single();
 
     setSaving(false);
@@ -299,10 +317,12 @@ export default function CalendarTab({ providerId }: { providerId: string }) {
     reload();
     resetForm();
 
-    if (newAppt) {
+    // ✅ Only send emails for real appointments
+    if (newAppt && newAppt.status !== "time_off") {
       await sendAppointmentEmail("confirmation", newAppt.id, providerId);
     }
   };
+
 
   // Custom renderer for events
   const renderEventContent = (eventInfo: any) => {
@@ -333,9 +353,17 @@ export default function CalendarTab({ providerId }: { providerId: string }) {
   // Delete handler
   const handleDelete = async () => {
     if (!editingEvent) return;
-    const confirmed = window.confirm("Cancel this appointment?");
-    if (!confirmed) return;
 
+    // If this is a time_off block, just delete it (no email)
+    if (editingEvent.status === "time_off") {
+      await supabase.from("appointments").delete().eq("id", editingEvent.id);
+      reload();
+      resetForm();
+      console.log("⏭️ Deleted time-off block (no email sent)");
+      return;
+    }
+
+    // Otherwise, delete and send cancellation email
     await supabase.from("appointments").delete().eq("id", editingEvent.id);
 
     reload();
@@ -371,6 +399,9 @@ export default function CalendarTab({ providerId }: { providerId: string }) {
             <DialogTitle>
               {editingEvent ? "Edit Appointment" : "Add Appointment / Time Off"}
             </DialogTitle>
+            <DialogDescription>
+              Fill out the form below to save or update this entry.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <p className="text-sm text-gray-500">
@@ -439,8 +470,12 @@ export default function CalendarTab({ providerId }: { providerId: string }) {
               <Label>Duration (minutes)</Label>
               <Input
                 type="number"
-                value={duration}
-                onChange={(e) => setDuration(Number(e.target.value))}
+                min={1}
+                max={480}
+                value={duration === 0 ? "" : duration}
+                onChange={(e) =>
+                  setDuration(e.target.value === "" ? 0 : Number(e.target.value))
+                }
               />
             </div>
 

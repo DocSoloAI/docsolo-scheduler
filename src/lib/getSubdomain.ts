@@ -1,16 +1,14 @@
-// src/lib/getSubdomain.ts
-
-export function getSubdomain(): string | null {
-  if (typeof window === "undefined") return null;
-
+export function getSubdomain() {
   const host = window.location.hostname;
 
-  // Only match subdomains like: drjim.docsoloscheduler.com
-  if (host.endsWith("docsoloscheduler.com")) {
-    const parts = host.split(".");
-    if (parts.length >= 3) {
-      return parts[0]; // e.g., 'drjim'
-    }
+  // 👇 Fallback for local dev
+  if (host === "localhost") {
+    return "drjim"; // change this to your test provider's subdomain
+  }
+
+  const parts = host.split(".");
+  if (parts.length > 2) {
+    return parts[0]; // e.g. drjim.docsoloscheduler.com → "drjim"
   }
 
   return null;

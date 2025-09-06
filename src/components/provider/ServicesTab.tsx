@@ -7,11 +7,13 @@ interface Service {
   id?: string;
   provider_id: string;
   name: string;
+  description?: string;  // 👈 new
   duration_minutes: number;
   is_active: boolean;
   isCustom?: boolean;
   default_for?: "new" | "established" | null;
 }
+
 
 const presetDurations = [15, 20, 30, 45, 60];
 
@@ -93,6 +95,7 @@ export default function ServicesTab({ providerId, onDirtyChange }: ServicesTabPr
       id: s.id ?? crypto.randomUUID(),
       provider_id: s.provider_id,
       name: s.name,
+      description: s.description || null,  // 👈 include description
       duration_minutes: s.duration_minutes,
       is_active: s.is_active,
       default_for: s.default_for ?? null,
@@ -138,6 +141,18 @@ export default function ServicesTab({ providerId, onDirtyChange }: ServicesTabPr
               value={service.name}
               onChange={(e) => updateService(idx, "name", e.target.value)}
               className="border p-2 rounded w-full"
+            />
+          </div>
+
+          {/* Service Description */}
+          <div className="mb-2">
+            <label className="block text-sm font-semibold mb-1">Description</label>
+            <textarea
+              value={service.description || ""}
+              onChange={(e) => updateService(idx, "description", e.target.value)}
+              className="border p-2 rounded w-full text-sm"
+              rows={2}
+              placeholder="Short description (shown to patients)"
             />
           </div>
 
