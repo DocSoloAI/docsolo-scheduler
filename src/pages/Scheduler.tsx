@@ -1,6 +1,6 @@
 // src/pages/Scheduler.tsx
 import { useEffect, useState } from "react";
-import { supabase } from "../../supabase/functions/_shared/supabaseClient";
+import { supabase } from "../lib/supabaseClient";
 
 interface Service {
   id: string;

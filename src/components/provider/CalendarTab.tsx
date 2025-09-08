@@ -116,9 +116,8 @@ const sendAppointmentEmail = async (
       minute: "2-digit",
     }),
     service: service?.name || "",
-    manageLink: `https://docsoloscheduler.com/${
-      provider?.subdomain || "demo"
-    }/manage/${appointment.id}`,
+    // 🔄 switched to bookthevisit.com for patient-facing flow
+    manageLink: `https://${provider?.subdomain || "demo"}.bookthevisit.com/manage/${appointment.id}`,
   };
 
   const fill = (str: string | null) =>

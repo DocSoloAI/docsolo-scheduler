@@ -8,7 +8,8 @@ export function getSubdomain() {
 
   const parts = host.split(".");
   if (parts.length > 2) {
-    return parts[0]; // e.g. drjim.docsoloscheduler.com → "drjim"
+    // e.g. drjim.bookthevisit.com → "drjim"
+    return parts[0];
   }
 
   return null;

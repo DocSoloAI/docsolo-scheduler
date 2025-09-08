@@ -1,3 +1,4 @@
+// scripts/sendReminders.ts
 import { supabase } from "../src/lib/supabaseClient";
 import { sendTemplatedEmail } from "../src/lib/email/sendTemplatedEmail";
 import { format } from "date-fns";
@@ -82,7 +83,8 @@ async function sendReminders() {
         time: formattedTime,
         service: service?.name || "Appointment",
         appointmentId: appt.id,
-        manageLink: `https://${provider?.subdomain || "demo"}.docsoloscheduler.com/manage/${appt.id}`,
+        // 🔄 switched to bookthevisit.com for patient-facing flow
+        manageLink: `https://${provider?.subdomain || "demo"}.bookthevisit.com/manage/${appt.id}`,
       },
     });
 

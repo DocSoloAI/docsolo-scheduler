@@ -70,7 +70,7 @@ export async function sendTemplatedEmail({
   // Send via Resend
   try {
     await resend.emails.send({
-      from: `${provider.office_name} <no-reply@docsoloscheduler.com>`,
+      from: `${provider.office_name} <no-reply@docsoloscheduler.com>`, // ✅ use single domain
       to,
       subject,
       html,

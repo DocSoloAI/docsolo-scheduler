@@ -125,7 +125,6 @@ export default function SignUpPage() {
       console.error("Template seeding error:", templateError);
     }
 
-
     // 4. Seed default services (generic names, works for any provider)
     await supabase.from("services").insert([
       {
@@ -149,8 +148,8 @@ export default function SignUpPage() {
     // 5. Show success message
     setSuccessMessage(
       "Sign-up successful! Please check your email and click the confirmation link. " +
-      "Once confirmed, you’ll be redirected to your personal dashboard."
-    );    
+        "Once confirmed, you’ll be redirected to your personal dashboard."
+    );
     setLoading(false);
   };
 
@@ -223,13 +222,13 @@ export default function SignUpPage() {
                 required
               />
               <span className="bg-gray-200 px-3 py-2 border border-l-0 rounded-r text-gray-600 text-sm">
-                .docsoloscheduler.com
+                .bookthevisit.com
               </span>
             </div>
             <p className="text-xs text-gray-500 mt-1">
               This will be your unique booking page link. Example:{" "}
               <span className="font-mono text-blue-600">
-                https://{subdomain || "yourname"}.docsoloscheduler.com
+                https://{subdomain || "yourname"}.bookthevisit.com
               </span>
             </p>
           </div>
@@ -325,5 +324,4 @@ export default function SignUpPage() {
       )}
     </div>
   );
-
 }

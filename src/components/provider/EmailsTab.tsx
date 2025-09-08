@@ -200,11 +200,13 @@ export default function EmailsTab({ providerId }: EmailsTabProps) {
       .replace(/{{time}}/g, "10:30 AM")
       .replace(/{{service}}/g, "Treatment Visit")
       .replace(/{{providerPhone}}/g, provider?.phone || "(000) 000-0000")
+      // 🔄 switched to bookthevisit.com for patient-facing preview
       .replace(
         /{{manageLink}}/g,
-        `https://docsoloscheduler.com/${provider?.subdomain || "demo"}/manage/123`
+        `https://${provider?.subdomain || "demo"}.bookthevisit.com/manage/123`
       );
   };
+
 
   return (
     <div className="space-y-6">

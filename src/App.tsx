@@ -1,18 +1,31 @@
 // src/App.tsx
-import { BrowserRouter, Routes, Route } from "react-router-dom";
 import BookTheVisitLanding from "./pages/BookTheVisitLanding";
-import Scheduler from "./pages/Scheduler";
+import BookingPage from "./BookingPage";
+import DocSoloLanding from "./pages/DocSoloLanding";
+import { getSubdomain } from "./lib/getSubdomain";
 
 export default function App() {
-  return (
-    <BrowserRouter>
-      <Routes>
-        {/* Landing page at root */}
-        <Route path="/" element={<BookTheVisitLanding />} />
+  const hostname = window.location.hostname;
 
-        {/* Scheduler (what you had before, moved into its own page) */}
-        <Route path="/scheduler" element={<Scheduler />} />
-      </Routes>
-    </BrowserRouter>
-  );
+  const patientDomain = "bookthevisit.com";
+  const providerDomain = "docsoloscheduler.com";
+
+  // Case 1: Root of bookthevisit.com → Patient landing page
+  if (hostname === patientDomain || hostname === `www.${patientDomain}`) {
+    return <BookTheVisitLanding />;
+  }
+
+  // Case 2: Patient subdomains (e.g., drjim.bookthevisit.com → BookingPage)
+  const subdomain = getSubdomain();
+  if (subdomain && hostname.endsWith(patientDomain)) {
+    return <BookingPage />;
+  }
+
+  // Case 3: Root of docsoloscheduler.com → Provider marketing landing
+  if (hostname === providerDomain || hostname === `www.${providerDomain}`) {
+    return <DocSoloLanding />;
+  }
+
+  // Case 4: Fallback (provider app routes like /dashboard, or 404)
+  return <div>Provider app / Not found</div>;
 }

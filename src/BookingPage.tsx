@@ -311,7 +311,8 @@ export default function BookingPage() {
       const formattedTime = format(start, "h:mm a");
       const appointmentId = crypto.randomUUID(); // or get from Supabase insert if needed
       const currentSubdomain = getSubdomain();
-      const manageLink = `https://${currentSubdomain}.docsoloscheduler.com/manage/${appointmentId}`;
+      // 🔄 switched to bookthevisit.com for patient-facing flow
+      const manageLink = `https://${currentSubdomain}.bookthevisit.com/manage/${appointmentId}`;
 
       await sendTemplatedEmail({
         templateType: "confirmation",
@@ -327,10 +328,10 @@ export default function BookingPage() {
         },
       });
 
-      // 5. Send provider notification
+      // 5. Send provider notification (still from docsoloscheduler.com)
       if (providerEmail) {
         await resend.emails.send({
-          from: "DocSoloScheduler <no-reply@docsoloscheduler.com>",
+          from: `${providerOfficeName || "DocSoloScheduler"} <no-reply@docsoloscheduler.com>`, // ✅ personalized
           to: [providerEmail].filter(Boolean) as string[],
           subject: `New appointment: ${fullName} on ${formattedDate}`,
           html: `
@@ -342,6 +343,7 @@ export default function BookingPage() {
           `,
         });
       }
+
 
       // 4. Success → show confirmation screen
       setConfirmed(true);
