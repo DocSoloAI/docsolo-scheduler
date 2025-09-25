@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabaseClient";
 import { parse } from "date-fns";
-import type { Patient, Service } from "@/types";
+import type { Patient } from "@/types";
 import { getSubdomain } from "@/lib/getSubdomain";
 import { useSearchParams } from "react-router-dom";
 import { sendTemplatedEmail } from "@/lib/email/sendTemplatedEmail";
@@ -433,11 +433,10 @@ export default function BookingPage() {
       const end = new Date(start.getTime() + durationMin * 60000);
 
       let appointmentId: string | null = null;
-      let apptRecord: any = null;
 
       if (rescheduleId) {
         // 🔄 Update existing appointment
-        const { data: updated, error: updateError } = await supabase
+        const { error: updateError } = await supabase
           .from("appointments")
           .update({
             service_id: serviceId,
@@ -446,14 +445,11 @@ export default function BookingPage() {
             patient_id: patientId,
             status: "booked",
           })
-          .eq("id", rescheduleId)
-          .select()
-          .single();
+          .eq("id", rescheduleId);
 
         if (updateError) throw updateError;
 
         appointmentId = rescheduleId;
-        apptRecord = updated;
       } else {
         // 🆕 Insert new appointment
         const { data: newAppt, error: insertApptError } = await supabase
@@ -476,8 +472,8 @@ export default function BookingPage() {
         if (!newAppt) throw new Error("Insert failed, no appointment returned");
 
         appointmentId = newAppt.id;
-        apptRecord = newAppt;
       }
+
 
       if (!appointmentId) throw new Error("Appointment ID missing");
 
