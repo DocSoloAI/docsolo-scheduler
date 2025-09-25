@@ -13,14 +13,14 @@ export default function BookTheVisitLanding() {
         <section className="bg-white rounded-2xl shadow p-6 space-y-3">
           <h2 className="text-2xl font-semibold">Patients</h2>
           <p className="text-lg text-gray-700">
-            Your provider will give you a custom booking link like{" "}
+            To schedule a visit, you’ll need your provider’s custom link such as{" "}
             <span className="font-mono text-blue-600">
-              drjim.bookthevisit.com
+              yourdoctorsname.bookthevisit.com
             </span>
             .
           </p>
           <p className="text-lg text-gray-700">
-            Please ask your provider for their link to schedule your visit.
+            Please contact your provider to get the correct link for booking.
           </p>
         </section>
 
@@ -28,14 +28,13 @@ export default function BookTheVisitLanding() {
         <section className="bg-white rounded-2xl shadow p-6 space-y-3">
           <h2 className="text-2xl font-semibold">Providers</h2>
           <p className="text-lg text-gray-700">
-            DocSoloScheduler is the idiot-proof scheduling system built
-            specifically for solo providers.
+            DocSoloScheduler powers BookTheVisit.com, the patient-facing booking system. As a provider, you’ll manage your schedule here at DocSoloScheduler.com, while your patients book through your custom link (e.g. drjones.bookthevisit.com).
           </p>
           <Button
             asChild
             className="bg-blue-600 hover:bg-blue-700 text-white text-lg px-6 py-3 rounded-xl"
           >
-            <a href="https://docsoloscheduler.com" target="_blank">
+            <a href="https://docsoloscheduler.com" target="_blank" rel="noreferrer">
               Learn More at DocSoloScheduler.com
             </a>
           </Button>

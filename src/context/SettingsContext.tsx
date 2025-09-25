@@ -29,23 +29,24 @@ export function SettingsProvider({
   const loadAll = async () => {
     setLoading(true);
 
-    const [svcRes, availRes, patRes, apptRes] = await Promise.all([
-      supabase
-        .from("services")
-        .select("id, provider_id, name, duration_minutes, is_active, default_for")
-        .eq("provider_id", providerId),
+  const [svcRes, availRes, patRes, apptRes] = await Promise.all([
+    supabase
+      .from("services")
+      .select("id, provider_id, name, description, duration_minutes, is_active, default_for")
+      .eq("provider_id", providerId),
 
-      supabase
-        .from("availability")
-        .select("*")
-        .eq("provider_id", providerId),
+    supabase
+      .from("availability")
+      .select("*")
+      .eq("provider_id", providerId),
 
-      supabase.from("patients").select("id, first_name, last_name, email"),
+    // ✅ Added cell_phone here
+    supabase.from("patients").select("id, first_name, last_name, email, cell_phone"),
 
-      supabase
-        .from("appointments")
-        .select(
-          `
+    supabase
+      .from("appointments")
+      .select(
+        `
         id,
         start_time,
         end_time,
@@ -54,9 +55,9 @@ export function SettingsProvider({
         status,
         patients:patient_id (first_name, last_name)
       `
-        )
-        .eq("provider_id", providerId),
-    ]);
+      )
+      .eq("provider_id", providerId),
+  ]);
 
     if (svcRes.data) setServices(svcRes.data);
     if (availRes.data) setAvailability(availRes.data);

@@ -1,18 +1,30 @@
+// supabase/functions/_shared/sendTemplatedEmail.ts
 // @ts-nocheck
-
 import { supabase } from "./supabaseClient.ts";
 
 interface AppointmentData {
   patientName: string;
+  patientEmail?: string;
+  patientPhone?: string;
   date: string;
   time: string;
   service: string;
   appointmentId: string;
   manageLink: string;
+  officeName?: string;
+  location?: string;
+  providerPhone?: string;
 }
 
 interface SendTemplatedEmailOptions {
-  templateType: "confirmation" | "reminder" | "update" | "cancellation";
+  templateType:
+    | "confirmation"
+    | "reminder"
+    | "update"
+    | "cancellation"
+    | "provider_confirmation"
+    | "provider_update"
+    | "provider_cancellation";
   to: string;
   providerId: string;
   appointmentData: AppointmentData;
@@ -24,10 +36,10 @@ export async function sendTemplatedEmail({
   providerId,
   appointmentData,
 }: SendTemplatedEmailOptions) {
-  // fetch template from DB
+  // fetch template
   const { data: template, error } = await supabase
     .from("email_templates")
-    .select("subject, body, html_body")
+    .select("subject, html_body")
     .eq("provider_id", providerId)
     .eq("template_type", templateType)
     .single();
@@ -37,31 +49,76 @@ export async function sendTemplatedEmail({
     return;
   }
 
-  // replace {{placeholders}}
+  // fetch provider announcement + logo
+  const { data: provider } = await supabase
+    .from("providers")
+    .select("announcement, logo_url, office_name, phone, street, city, state, zip")
+    .eq("id", providerId)
+    .single();
+
+  // replace placeholders with appointment + provider data
   const fill = (str: string | null) =>
     str
       ? str.replace(/{{(.*?)}}/g, (_, key) => {
-          const k = key.trim() as keyof AppointmentData;
-          return appointmentData[k] || "";
+          const k = key.trim();
+          return (
+            appointmentData[k as keyof AppointmentData] ||
+            provider?.[k as keyof typeof provider] ||
+            ""
+          );
         })
       : "";
 
   const subject = fill(template.subject);
-  const text = fill(template.body);
-  const html = fill(template.html_body);
+  let html = fill(template.html_body);
 
-  // send email via your API route
+  // prepend logo if available
+  if (provider?.logo_url) {
+    html =
+      `<div style="margin-bottom:16px;text-align:left;">
+         <img src="${provider.logo_url}" 
+              alt="${provider.office_name || "Logo"}" 
+              style="max-height:60px;object-fit:contain;" />
+       </div>` + html;
+  }
+
+  // append announcement if available
+  if (provider?.announcement) {
+    html += `<br/><br/><p style="font-size:12px;color:#555">
+               <em>${provider.announcement}</em>
+             </p>`;
+  }
+
   try {
-    await fetch(`${Deno.env.get("EMAIL_API_URL")}`, {
+    console.log("📧 Sending email via Resend:", {
+      to,
+      subject,
+      templateType,
+    });
+
+    const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${Deno.env.get("RESEND_API_KEY")}`,
+      },
       body: JSON.stringify({
+        from: `${provider?.office_name || "DocSoloScheduler"} <noreply@${Deno.env.get("RESEND_DOMAIN")}>`,
         to,
         subject,
-        text,
         html,
       }),
     });
+
+
+    const msg = await res.text();
+    console.log("📨 Resend response status:", res.status);
+    console.log("📨 Resend response body:", msg);
+
+    if (!res.ok) {
+      throw new Error(`Resend API error: ${msg}`);
+    }
+
     console.log(`✅ ${templateType} email sent to ${to}`);
   } catch (err) {
     console.error("❌ Send email error:", err);

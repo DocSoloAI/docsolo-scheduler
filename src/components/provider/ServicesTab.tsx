@@ -7,13 +7,12 @@ interface Service {
   id?: string;
   provider_id: string;
   name: string;
-  description?: string;  // 👈 new
+  description?: string;
   duration_minutes: number;
   is_active: boolean;
   isCustom?: boolean;
   default_for?: "new" | "established" | null;
 }
-
 
 const presetDurations = [15, 20, 30, 45, 60];
 
@@ -26,7 +25,7 @@ export default function ServicesTab({ providerId, onDirtyChange }: ServicesTabPr
   const { services: ctxServices, reload, loading } = useSettings();
   const [services, setServices] = useState<Service[]>([]);
 
-  // Sync context → local state (adds isCustom)
+  // Load services from context or initialize defaults
   useEffect(() => {
     if (ctxServices && ctxServices.length > 0) {
       setServices(
@@ -35,8 +34,30 @@ export default function ServicesTab({ providerId, onDirtyChange }: ServicesTabPr
           isCustom: !presetDurations.includes(s.duration_minutes),
         }))
       );
+    } else if (providerId) {
+      // ✅ Default starter services
+      setServices([
+        {
+          provider_id: providerId,
+          name: "Returning Patient",
+          description: "Book a follow-up Chiropractic Treatment.",
+          duration_minutes: 30,
+          is_active: true,
+          isCustom: false,
+          default_for: "established",
+        },
+        {
+          provider_id: providerId,
+          name: "New Patient",
+          description: "Book your first New Patient Evaluation.",
+          duration_minutes: 60,
+          is_active: true,
+          isCustom: false,
+          default_for: "new",
+        },
+      ]);
     }
-  }, [ctxServices]);
+  }, [ctxServices, providerId]);
 
   const updateService = <K extends keyof Service>(
     idx: number,
@@ -45,7 +66,7 @@ export default function ServicesTab({ providerId, onDirtyChange }: ServicesTabPr
   ) => {
     let updated = [...services];
 
-    // Enforce only one default per type
+    // Ensure only one default per type
     if (field === "default_for" && value) {
       updated = updated.map((s, i) =>
         i !== idx && s.default_for === value ? { ...s, default_for: null } : s
@@ -56,7 +77,6 @@ export default function ServicesTab({ providerId, onDirtyChange }: ServicesTabPr
     setServices(updated);
     onDirtyChange?.(true);
   };
-
 
   const deleteService = (idx: number) => {
     const newServices = [...services];
@@ -71,9 +91,11 @@ export default function ServicesTab({ providerId, onDirtyChange }: ServicesTabPr
       {
         provider_id: providerId,
         name: "New Service",
+        description: "",
         duration_minutes: 30,
         is_active: true,
         isCustom: false,
+        default_for: null,
       },
     ]);
     onDirtyChange?.(true);
@@ -95,7 +117,7 @@ export default function ServicesTab({ providerId, onDirtyChange }: ServicesTabPr
       id: s.id ?? crypto.randomUUID(),
       provider_id: s.provider_id,
       name: s.name,
-      description: s.description || null,  // 👈 include description
+      description: s.description || null,
       duration_minutes: s.duration_minutes,
       is_active: s.is_active,
       default_for: s.default_for ?? null,
@@ -118,7 +140,7 @@ export default function ServicesTab({ providerId, onDirtyChange }: ServicesTabPr
     alert("Services saved ✅");
     onDirtyChange?.(false);
 
-    // ✅ refresh context → stays canonical
+    // ✅ Refresh context → stays canonical
     reload();
   };
 
@@ -185,7 +207,7 @@ export default function ServicesTab({ providerId, onDirtyChange }: ServicesTabPr
                 <input
                   type="number"
                   min={1}
-                  max={60}
+                  max={480}
                   value={service.duration_minutes}
                   onChange={(e) => updateService(idx, "duration_minutes", Number(e.target.value))}
                   className="border p-2 rounded w-28"
@@ -238,7 +260,6 @@ export default function ServicesTab({ providerId, onDirtyChange }: ServicesTabPr
           </button>
         </div>
       ))}
-
 
       <div className="flex gap-2">
         <button

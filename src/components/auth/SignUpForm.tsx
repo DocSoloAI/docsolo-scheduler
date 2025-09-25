@@ -159,12 +159,27 @@ export default function SignUpForm() {
             value={officeName} onChange={(e) => setOfficeName(e.target.value)} />
 
           {/* Subdomain */}
-          <div className="flex">
-            <input className="flex-1 p-2 border rounded-l" placeholder="yourname" required
-              value={subdomain} onChange={(e) => setSubdomain(e.target.value)} />
-            <span className="bg-gray-200 px-3 py-2 border border-l-0 rounded-r text-sm text-gray-600">
-              .bookthevisit.com
-            </span>
+          <div className="mb-3">
+            <label className="block text-sm font-medium mb-1 text-gray-700">
+              Pick your custom website link <span className="text-red-500">*</span>
+            </label>
+            <div className="flex">
+              <input
+                className="flex-1 p-2 border rounded-l"
+                placeholder="yourname"
+                required
+                value={subdomain}
+                onChange={(e) => setSubdomain(e.target.value)}
+              />
+              <span className="bg-gray-100 px-3 py-2 border border-l-0 rounded-r text-gray-700 text-sm font-mono">
+                .bookthevisit.com
+              </span>
+            </div>
+            <p className="text-xs text-gray-500 mt-1">
+              This will be your patient booking link. <br />
+              Example: enter <span className="font-mono text-blue-600">drjones</span> →{" "}
+              <span className="font-mono text-blue-600">drjones.bookthevisit.com</span>
+            </p>
           </div>
 
           {/* Auth */}

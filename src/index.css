@@ -84,3 +84,17 @@
 html {
   scrollbar-gutter: stable;
 }
+
+/* === Calendar selected day (React Day Picker v8) === */
+.rdp-day_selected,
+.rdp-day[aria-selected="true"],
+.rdp-day_selected:focus,
+.rdp-day_selected:hover {
+  background-color: #2563eb !important; /* Tailwind blue-600 */
+  color: #fff !important;
+  border-radius: 0.375rem !important; /* rounded-md */
+}
+
+.rdp-day_selected:hover {
+  background-color: #1d4ed8 !important; /* Tailwind blue-700 */
+}

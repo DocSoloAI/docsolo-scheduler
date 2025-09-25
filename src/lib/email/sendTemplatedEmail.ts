@@ -1,21 +1,36 @@
-import { supabase } from "@/lib/supabaseClient";
-import { resend } from "@/lib/resend"; // You must configure this
-import stripHtml from "./stripHtml.ts";
+// src/lib/email/sendTemplatedEmail.ts
 
-type TemplateType = "confirmation" | "reminder" | "update" | "cancellation";
+interface AppointmentData {
+  patientName: string;
+  patientEmail?: string;   // 👈 ADD
+  patientPhone?: string;   // 👈 ADD
+  date: string;
+  time: string;
+  service: string;
+  appointmentId: string;
+  manageLink: string;
+  officeName?: string;
+  providerName?: string;
+  location?: string;
+  providerPhone?: string;
+  announcement?: string;
+  logoUrl?: string;
+  patientNote?: string;
+}
+
 
 interface SendTemplatedEmailOptions {
-  templateType: TemplateType;
+  templateType:
+    | "confirmation"
+    | "reminder"
+    | "update"
+    | "cancellation"
+    | "provider_confirmation"
+    | "provider_update"
+    | "provider_cancellation";
   to: string;
   providerId: string;
-  appointmentData: {
-    patientName: string;
-    date: string;
-    time: string;
-    service: string;
-    appointmentId: string;
-    manageLink: string;
-  };
+  appointmentData: AppointmentData;
 }
 
 export async function sendTemplatedEmail({
@@ -24,64 +39,28 @@ export async function sendTemplatedEmail({
   providerId,
   appointmentData,
 }: SendTemplatedEmailOptions) {
-  // Fetch provider info
-  const { data: provider, error: providerError } = await supabase
-    .from("providers")
-    .select("*")
-    .eq("id", providerId)
-    .single();
-
-  if (providerError || !provider) {
-    console.error("Provider fetch failed", providerError);
-    return;
-  }
-
-  // Fetch email template
-  const { data: templates } = await supabase
-    .from("email_templates")
-    .select("*")
-    .eq("provider_id", providerId)
-    .eq("template_type", templateType);
-
-  const template = templates?.[0];
-  if (!template) {
-    console.warn(`No template found for type ${templateType}`);
-    return;
-  }
-
-  // Construct variables
-  const variables: Record<string, string> = {
-    providerName: `${provider.first_name} ${provider.last_name}${provider.suffix ? ", " + provider.suffix : ""}`,
-    officeName: provider.office_name,
-    location: [provider.street, provider.city, provider.state, provider.zip].filter(Boolean).join(", "),
-    providerPhone: provider.phone || "",
-    patientName: appointmentData.patientName,
-    date: appointmentData.date,
-    time: appointmentData.time,
-    service: appointmentData.service,
-    appointmentId: appointmentData.appointmentId,
-    manageLink: appointmentData.manageLink,
-  };
-
-  const subject = injectVariables(template.subject, variables);
-  const html = injectVariables(template.html_body, variables);
-  const text = stripHtml(html);
-
-  // Send via Resend
   try {
-    await resend.emails.send({
-      from: `${provider.office_name} <no-reply@docsoloscheduler.com>`, // ✅ use single domain
-      to,
-      subject,
-      html,
-      text,
-    });
-  } catch (err) {
-    console.error("Resend send failed:", err);
-  }
-}
+    const res = await fetch(
+      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sendTemplatedEmail`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify({
+          templateType,
+          to,
+          providerId,
+          appointmentData,
+        }),
+      }
+    );
 
-// Helper to inject template variables
-function injectVariables(template: string, variables: Record<string, string>) {
-  return template.replace(/{{(.*?)}}/g, (_, key) => variables[key.trim()] || "");
+    const text = await res.text();
+    if (!res.ok) throw new Error(text);
+    console.log(`✅ ${templateType} email sent to ${to}`);
+  } catch (err) {
+    console.error("❌ Error sending templated email:", err);
+  }
 }

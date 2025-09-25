@@ -3,7 +3,6 @@ import { supabase } from "../src/lib/supabaseClient";
 import { sendTemplatedEmail } from "../src/lib/email/sendTemplatedEmail";
 import { format } from "date-fns";
 
-// Define what we expect from Supabase
 interface ReminderAppt {
   id: string;
   start_time: string;
@@ -11,7 +10,7 @@ interface ReminderAppt {
   provider_id: string;
   patients: { first_name: string; last_name: string; email: string }[];
   services: { name: string }[];
-  providers: { subdomain: string }[];
+  providers: { office_name: string; send_reminders: boolean }[];
 }
 
 async function sendReminders() {
@@ -19,9 +18,9 @@ async function sendReminders() {
 
   const now = new Date();
 
-  // Build query window = from 1h30m to 24h15m ahead (covers both same-day + next-day)
-  const windowStart = new Date(now.getTime() + 90 * 60 * 1000); // 1h30m from now
-  const windowEnd = new Date(now.getTime() + 24.25 * 60 * 60 * 1000); // 24h15m from now
+  // Window: 1h30m → 24h15m ahead
+  const windowStart = new Date(now.getTime() + 90 * 60 * 1000);
+  const windowEnd = new Date(now.getTime() + 24.25 * 60 * 60 * 1000);
 
   const { data: appts, error } = await supabase
     .from("appointments")
@@ -32,7 +31,7 @@ async function sendReminders() {
       provider_id,
       patients ( first_name, last_name, email ),
       services ( name ),
-      providers ( subdomain )
+      providers ( office_name, send_reminders )
     `)
     .gte("start_time", windowStart.toISOString())
     .lte("start_time", windowEnd.toISOString())
@@ -54,7 +53,14 @@ async function sendReminders() {
     const provider = appt.providers?.[0];
 
     if (!patient?.email) {
-      console.log(`⚠️ Skipping appointment ${appt.id}: no patient email`);
+      console.log(`⚠️ Skipping appt ${appt.id}: no patient email`);
+      continue;
+    }
+
+    if (!provider?.send_reminders) {
+      console.log(
+        `🚫 Skipping appt ${appt.id}: reminders disabled for provider "${provider?.office_name}"`
+      );
       continue;
     }
 
@@ -66,7 +72,7 @@ async function sendReminders() {
     const is2hReminder = diffMinutes >= 90 && diffMinutes <= 150;     // 1.5h–2.5h
 
     if (!is24hReminder && !is2hReminder) {
-      console.log(`⏭️ Skipping ${appt.id}, not in reminder window`);
+      console.log(`⏭️ Skipping appt ${appt.id}, not in reminder window`);
       continue;
     }
 
@@ -83,12 +89,18 @@ async function sendReminders() {
         time: formattedTime,
         service: service?.name || "Appointment",
         appointmentId: appt.id,
-        // 🔄 switched to bookthevisit.com for patient-facing flow
-        manageLink: `https://${provider?.subdomain || "demo"}.bookthevisit.com/manage/${appt.id}`,
+        manageLink: `https://${(provider?.office_name || "demo")
+          .replace(/\s+/g, "")
+          .toLowerCase()}.bookthevisit.com/manage/${appt.id}`,
       },
     });
 
-    console.log(`✅ Reminder sent to ${patient.email} for ${formattedDate} ${formattedTime}`);
+    const reminderType = is24hReminder ? "24h" : "2h";
+    console.log(
+      `📧 [Reminder-${reminderType}] appt ${appt.id} | ${
+        provider?.office_name || "Unknown Provider"
+      } | ${formattedDate} ${formattedTime}`
+    );
   }
 }
 

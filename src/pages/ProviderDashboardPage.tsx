@@ -10,6 +10,7 @@ import ServicesTab from "@/components/provider/ServicesTab";
 import EmailsTab from "@/components/provider/EmailsTab";
 import { SettingsProvider } from "@/context/SettingsContext";
 import { Button } from "@/components/ui/button";
+import PatientsTab from "@/components/provider/PatientsTab";
 
 export default function ProviderSettingsPage() {
   const [activeTab, setActiveTab] = useState("calendar");
@@ -18,7 +19,7 @@ export default function ProviderSettingsPage() {
   const [providerId, setProviderId] = useState<string | null>(null);
   const [providerEmail, setProviderEmail] = useState<string | null>(null);
   const [officeName, setOfficeName] = useState<string>("");
-  
+
   useEffect(() => {
     document.title = `${officeName || "DocSoloScheduler"} – Dashboard`;
   }, [officeName]);
@@ -54,7 +55,7 @@ export default function ProviderSettingsPage() {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    navigate("/sign-in");
+    navigate("/"); // 👈 back to landing
   };
 
   if (!providerId) {
@@ -102,8 +103,9 @@ export default function ProviderSettingsPage() {
                 setActiveTab(nextTab);
               }}
             >
-              <TabsList className="grid grid-cols-4 gap-2 mb-6">
+              <TabsList className="grid grid-cols-5 gap-2 mb-6">
                 <TabsTrigger value="calendar">Calendar</TabsTrigger>
+                <TabsTrigger value="patients">Patients</TabsTrigger> {/* NEW */}
                 <TabsTrigger value="hours">Hours</TabsTrigger>
                 <TabsTrigger value="services">Services</TabsTrigger>
                 <TabsTrigger value="emails">Emails</TabsTrigger>
@@ -111,6 +113,10 @@ export default function ProviderSettingsPage() {
 
               <TabsContent value="calendar">
                 <CalendarTab providerId={providerId} />
+              </TabsContent>
+
+              <TabsContent value="patients">
+                <PatientsTab providerId={providerId} /> {/* NEW */}
               </TabsContent>
 
               <TabsContent value="hours">
@@ -127,6 +133,7 @@ export default function ProviderSettingsPage() {
               <TabsContent value="emails">
                 <EmailsTab providerId={providerId} />
               </TabsContent>
+
             </Tabs>
           </SettingsProvider>
         </CardContent>
