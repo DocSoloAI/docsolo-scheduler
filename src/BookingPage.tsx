@@ -801,7 +801,45 @@ export default function BookingPage() {
                       </div>
                     </div>
 
-                    {/* Row 2: Email (always) + DOB (new patients only) stays unchanged */}
+                    {/* Row 2: Email (always) + DOB (new patients only) */}
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Email <span className="text-red-500">*</span>
+                        </label>
+                        <Input
+                          type="email"
+                          placeholder=""
+                          autoComplete="email"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          required
+                          onBlur={(e) => {
+                            const val = e.target.value;
+                            if (val && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val)) {
+                              setFormError("Please enter a valid email address.");
+                            } else {
+                              setFormError("");
+                            }
+                          }}
+                        />
+                      </div>
+
+                      {patientType === "new" && (
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Date of Birth <span className="text-red-500">*</span>
+                          </label>
+                          <Input
+                            type="date"
+                            value={birthday}
+                            onChange={(e) => setBirthday(e.target.value)}
+                            required
+                          />
+                        </div>
+                      )}
+                    </div>
+
 
                     {/* Row 3: Cell + Home */}
                     <div className="grid md:grid-cols-2 gap-4">
