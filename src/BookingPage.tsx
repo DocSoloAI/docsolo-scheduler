@@ -401,6 +401,7 @@ export default function BookingPage() {
         return;
       }
       const serviceId = service.id;
+      const normalizedEmail = email.trim().toLowerCase(); // ✅ normalize once here
 
       // 1. Find or create patient
       const { data: existingPatient, error: findError } = await supabase
@@ -507,7 +508,7 @@ export default function BookingPage() {
       // Patient email
       await sendTemplatedEmail({
         templateType: rescheduleId ? "update" : "confirmation",
-        to: email,
+        to: normalizedEmail,
         providerId,
         appointmentData: {
           patientName: fullName,
@@ -535,7 +536,7 @@ export default function BookingPage() {
           providerId,
           appointmentData: {
             patientName: fullName,
-            patientEmail: email,
+            patientEmail: normalizedEmail, // ✅ lowercase for consistency
             patientPhone: cellPhone,
             date: formattedDate,
             time: formattedTime,
@@ -803,30 +804,39 @@ export default function BookingPage() {
 
                     {/* Row 2: Email (always) + DOB (new patients only) */}
                     <div className="grid md:grid-cols-2 gap-4">
-                      <div>
+                      <div className="flex flex-col">
                         <label className="block text-sm font-medium text-gray-700 mb-1">
                           Email <span className="text-red-500">*</span>
                         </label>
                         <Input
                           type="email"
-                          placeholder=""
+                          placeholder="Enter your email"
                           autoComplete="email"
                           value={email}
-                          onChange={(e) => setEmail(e.target.value)}
-                          required
+                          onChange={(e) => setEmail(e.target.value.trim().toLowerCase())} // ✅ normalize
                           onBlur={(e) => {
-                            const val = e.target.value;
-                            if (val && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val)) {
+                            const val = e.target.value.trim().toLowerCase();
+                            if (!val) {
+                              setFormError("Email is required.");
+                            } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val)) {
                               setFormError("Please enter a valid email address.");
                             } else {
                               setFormError("");
                             }
                           }}
+                          required
+                          aria-invalid={!!formError}
+                          aria-describedby="email-error"
                         />
+                        {formError && (
+                          <span id="email-error" className="mt-1 text-sm text-red-600">
+                            {formError}
+                          </span>
+                        )}
                       </div>
 
                       {patientType === "new" && (
-                        <div>
+                        <div className="flex flex-col">
                           <label className="block text-sm font-medium text-gray-700 mb-1">
                             Date of Birth <span className="text-red-500">*</span>
                           </label>
@@ -839,6 +849,7 @@ export default function BookingPage() {
                         </div>
                       )}
                     </div>
+
 
 
                     {/* Row 3: Cell + Home */}
