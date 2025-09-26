@@ -150,13 +150,25 @@ export default function BookingPage() {
 
     const channel = supabase
       .channel(`booking-${providerId}-realtime`)
+      // 🔄 Listen for appointment changes
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "appointments", filter: `provider_id=eq.${providerId}` },
         async () => {
           console.log("🔄 Realtime: appointments changed → reloading availability");
           if (selectedDate) {
-            // Re-run availability check
+            const event = new Event("reload-availability");
+            window.dispatchEvent(event);
+          }
+        }
+      )
+      // 🔄 Listen for time_off changes (holidays, blocked days)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "time_off", filter: `provider_id=eq.${providerId}` },
+        async () => {
+          console.log("🔄 Realtime: time_off changed → reloading availability");
+          if (selectedDate) {
             const event = new Event("reload-availability");
             window.dispatchEvent(event);
           }
@@ -168,6 +180,7 @@ export default function BookingPage() {
       supabase.removeChannel(channel);
     };
   }, [providerId, selectedDate]);
+
 
   useEffect(() => {
     const loadAvailability = async () => {
@@ -210,30 +223,38 @@ export default function BookingPage() {
       allSlots.sort((a, b) => a.date.getTime() - b.date.getTime());
 
       const now = new Date();
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const tomorrow = new Date(today);
-      tomorrow.setDate(today.getDate() + 1);
-
       const startOfDay = new Date(selectedDate);
       startOfDay.setHours(0, 0, 0, 0);
       const endOfDay = new Date(selectedDate);
       endOfDay.setHours(23, 59, 59, 999);
 
+      // --- Fetch booked appts ---
       const { data: appts } = await supabase
         .from("appointments")
         .select("id, start_time, end_time, status")
         .eq("provider_id", providerId)
-        .in("status", ["booked", "time_off"])
+        .eq("status", "booked")
         .gte("start_time", startOfDay.toISOString())
         .lte("end_time", endOfDay.toISOString());
 
-      const bookedSlots = (appts || [])
-        .filter((a) => !rescheduleId || a.id !== rescheduleId)
-        .map((a) => ({
+      // --- Fetch provider time_off (holidays, days off, etc.) ---
+      const { data: offs } = await supabase
+        .from("time_off")
+        .select("start_time, end_time")
+        .eq("provider_id", providerId)
+        .gte("start_time", startOfDay.toISOString())
+        .lte("end_time", endOfDay.toISOString());
+
+      const bookedSlots = [
+        ...(appts || []).filter((a) => !rescheduleId || a.id !== rescheduleId).map((a) => ({
           start: new Date(a.start_time),
           end: new Date(a.end_time),
-        }));
+        })),
+        ...(offs || []).map((o) => ({
+          start: new Date(o.start_time),
+          end: new Date(o.end_time),
+        })),
+      ];
 
       const freeSlots = allSlots
         .filter((slot) => !bookedSlots.some((b) => slot.date >= b.start && slot.date < b.end))
@@ -247,6 +268,7 @@ export default function BookingPage() {
 
     loadAvailability();
   }, [providerId, selectedDate]);
+
 
   // 🔽 Refs
   const dateTimeRef = useRef<HTMLDivElement>(null);
