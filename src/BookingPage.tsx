@@ -695,7 +695,14 @@ export default function BookingPage() {
                       {selectedDate && (
                         <div>
                           <p className="text-gray-600 mb-3">
-                            Available times on {format(selectedDate, "PPP")}:
+                            Available times on{" "}
+                            {format(
+                              selectedDate,
+                              selectedDate.getFullYear() === new Date().getFullYear()
+                                ? "EEEE, MMMM d"
+                                : "EEEE, MMMM d, yyyy"
+                            )}
+                            :
                           </p>
                           <div className="grid grid-cols-2 gap-4">
                             {/* AM column */}
@@ -1096,7 +1103,13 @@ export default function BookingPage() {
                 {/* Appointment details */}
                 {selectedDate && selectedTime && (
                   <p className="text-gray-700 font-medium mt-2">
-                    {format(selectedDate, "MMMM d, yyyy")} at {selectedTime}
+                    {format(
+                      selectedDate,
+                      selectedDate.getFullYear() === new Date().getFullYear()
+                        ? "EEEE, MMMM d"
+                        : "EEEE, MMMM d, yyyy"
+                    )}{" "}
+                    at {selectedTime}                    
                   </p>
                 )}
                 {services.find((s) => s.default_for === patientType)?.name && (
@@ -1171,7 +1184,13 @@ export default function BookingPage() {
                 )}
                 {selectedDate && selectedTime && (
                   <p className="text-sm text-gray-600 mt-2">
-                    {format(selectedDate, "MMMM d, yyyy")} at {selectedTime}
+                    {format(
+                      selectedDate,
+                      selectedDate.getFullYear() === new Date().getFullYear()
+                        ? "EEEE, MMMM d"
+                        : "EEEE, MMMM d, yyyy"
+                    )}{" "}
+                    at {selectedTime}
                   </p>
                 )}
 
