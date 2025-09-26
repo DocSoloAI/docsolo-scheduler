@@ -7,11 +7,11 @@ import { Input } from "@/components/ui/input";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabaseClient";
 import { parse } from "date-fns";
-import type { Patient } from "@/types";
 import { getSubdomain } from "@/lib/getSubdomain";
 import { useSearchParams } from "react-router-dom";
 import { sendTemplatedEmail } from "@/lib/email/sendTemplatedEmail";
 import { useSettings } from "@/context/SettingsContext";
+import { upsertPatientAndCreateAppointment } from "@/lib/db";
 
 export default function BookingPage() {
   const { services } = useSettings();
@@ -403,46 +403,7 @@ export default function BookingPage() {
       const serviceId = service.id;
       const normalizedEmail = email.trim().toLowerCase(); // ✅ normalize once here
 
-      // 1. Find or create patient
-      const { data: existingPatient, error: findError } = await supabase
-        .from("patients")
-        .select("id, first_name, last_name, email")
-        .eq("provider_id", providerId)
-        .or(`email.eq.${email},cell_phone.eq.${cellPhone}`)
-        .maybeSingle<Patient>();
-
-      if (findError) throw findError;
-
-      let patientId: string;
-      if (existingPatient) {
-        patientId = existingPatient.id;
-      } else {
-        const { data: newPatient, error: insertPatientError } = await supabase
-          .from("patients")
-          .insert([
-            {
-              provider_id: providerId,
-              first_name: firstName,
-              last_name: lastName,
-              full_name: `${firstName} ${lastName}`,
-              email,
-              cell_phone: cellPhone,
-              home_phone: homePhone,
-              birthday: birthday ? new Date(birthday).toISOString() : null,
-              street,
-              city,
-              state,
-              zip,
-            },
-          ])
-          .select()
-          .single();
-
-        if (insertPatientError) throw insertPatientError;
-        patientId = newPatient.id;
-      }
-
-      // 2. Get service duration
+      // 1. Get service duration
       const { data: serviceData, error: serviceError } = await supabase
         .from("services")
         .select("duration_minutes")
@@ -465,42 +426,37 @@ export default function BookingPage() {
             service_id: serviceId,
             start_time: start.toISOString(),
             end_time: end.toISOString(),
-            patient_id: patientId,
             status: "booked",
           })
           .eq("id", rescheduleId);
 
         if (updateError) throw updateError;
-
         appointmentId = rescheduleId;
       } else {
-        // 🆕 Insert new appointment
-        const { data: newAppt, error: insertApptError } = await supabase
-          .from("appointments")
-          .insert([
-            {
-              provider_id: providerId,
-              patient_id: patientId,
-              service_id: serviceId,
-              start_time: start.toISOString(),
-              end_time: end.toISOString(),
-              status: "booked",
-              patient_note: comments || null,
-            },
-          ])
-          .select()
-          .single();
-
-        if (insertApptError) throw insertApptError;
-        if (!newAppt) throw new Error("Insert failed, no appointment returned");
+        // 🆕 Use helper for patient upsert + appointment insert
+        const newAppt = await upsertPatientAndCreateAppointment(
+          {
+            first_name: firstName,
+            last_name: lastName,
+            email: normalizedEmail,
+            cell_phone: cellPhone,
+            provider_id: providerId,
+          },
+          {
+            service_id: serviceId,
+            start_time: start.toISOString(),
+            end_time: end.toISOString(),
+            status: "booked",
+            patient_note: comments || null,
+          }
+        );
 
         appointmentId = newAppt.id;
       }
 
-
       if (!appointmentId) throw new Error("Appointment ID missing");
 
-      // 3. Emails
+      // 2. Emails
       const fullName = `${firstName} ${lastName}`;
       const formattedDate = format(start, "MMMM d, yyyy");
       const formattedTime = format(start, "h:mm a");
@@ -531,7 +487,9 @@ export default function BookingPage() {
       // Provider email
       if (providerEmail) {
         await sendTemplatedEmail({
-          templateType: rescheduleId ? "provider_update" : "provider_confirmation",
+          templateType: rescheduleId
+            ? "provider_update"
+            : "provider_confirmation",
           to: providerEmail,
           providerId,
           appointmentData: {
@@ -552,7 +510,7 @@ export default function BookingPage() {
         });
       }
 
-      // 4. Mark confirmed
+      // 3. Mark confirmed
       setAppointmentId(appointmentId);
       setConfirmed(true);
     } catch (err) {
@@ -560,6 +518,7 @@ export default function BookingPage() {
       alert("Something went wrong booking your appointment.");
     }
   };
+
 
 
 
