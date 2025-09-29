@@ -640,6 +640,20 @@ export default function CalendarTab({ providerId }: { providerId: string }) {
                       ))}
                     </SelectContent>
                   </Select>
+
+                  {/* ✅ Show contact info directly under Patient */}
+                  {selectedPatient && (
+                    <div className="text-sm text-gray-600 mt-1">
+                      <p>
+                        Email:{" "}
+                        {patients.find((p) => p.id === selectedPatient)?.email || "—"}
+                      </p>
+                      <p>
+                        Phone:{" "}
+                        {patients.find((p) => p.id === selectedPatient)?.cell_phone || "—"}
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-1">
@@ -673,12 +687,11 @@ export default function CalendarTab({ providerId }: { providerId: string }) {
                     max={480}
                     value={duration === 0 ? "" : duration}
                     onChange={(e) =>
-                      setDuration(
-                        e.target.value === "" ? 0 : Number(e.target.value)
-                      )
+                      setDuration(e.target.value === "" ? 0 : Number(e.target.value))
                     }
                   />
                 </div>
+
                 {/* Patient Note */}
                 {editingEvent?.extendedProps?.patient_note && (
                   <div className="space-y-1">
@@ -690,6 +703,7 @@ export default function CalendarTab({ providerId }: { providerId: string }) {
                 )}
               </div>
             </TabsContent>
+
 
             {/* Time Off Form */}
             <TabsContent value="timeoff" className="min-h-[280px]">

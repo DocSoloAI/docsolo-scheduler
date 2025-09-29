@@ -1,17 +1,17 @@
 // src/components/provider/PatientsTab.tsx
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useSettings } from "@/context/SettingsContext";
 
 interface PatientsTabProps {
   providerId: string;
 }
 
 export default function PatientsTab({ providerId }: PatientsTabProps) {
-  const { patients, loading, reload } = useSettings();
+  const [patients, setPatients] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const [editing, setEditing] = useState<any | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -21,6 +21,22 @@ export default function PatientsTab({ providerId }: PatientsTabProps) {
     email: "",
     cell_phone: "",
   });
+
+  // 🔄 Load patients with visit count + last appointment
+  useEffect(() => {
+    const loadPatients = async () => {
+      setLoading(true);
+      const { data, error } = await supabase.rpc("get_patients_with_visits");
+      if (error) {
+        console.error("Error loading patients:", error.message);
+        setPatients([]);
+      } else {
+        setPatients(data || []);
+      }
+      setLoading(false);
+    };
+    loadPatients();
+  }, []);
 
   const startAdd = () => {
     setEditing(null);
@@ -58,7 +74,6 @@ export default function PatientsTab({ providerId }: PatientsTabProps) {
           provider_id: providerId,
         },
       ]);
-
       if (error) {
         alert("Error adding patient: " + error.message);
         return;
@@ -69,7 +84,11 @@ export default function PatientsTab({ providerId }: PatientsTabProps) {
     setShowForm(false);
     setForm({ first_name: "", last_name: "", email: "", cell_phone: "" });
 
-    await reload(); // ✅ refresh global context so CalendarTab sees new patient
+    // reload list
+    const { data } = await supabase.rpc("get_patients_with_visits", {
+      provider_id_input: providerId,
+    });
+    setPatients(data || []);
   };
 
   if (loading) return <div>Loading patients…</div>;
@@ -86,20 +105,26 @@ export default function PatientsTab({ providerId }: PatientsTabProps) {
           <table className="min-w-full border text-sm">
             <thead className="bg-gray-100 text-left">
               <tr>
-                <th className="p-2 border">First Name</th>
-                <th className="p-2 border">Last Name</th>
+                <th className="p-2 border">Name</th>
                 <th className="p-2 border">Email</th>
                 <th className="p-2 border">Phone</th>
+                <th className="p-2 border">Visits</th>
+                <th className="p-2 border">Last Appt</th>
                 <th className="p-2 border">Actions</th>
               </tr>
             </thead>
             <tbody>
               {patients.map((p) => (
                 <tr key={p.id} className="hover:bg-gray-50">
-                  <td className="p-2 border">{p.first_name}</td>
-                  <td className="p-2 border">{p.last_name}</td>
+                  <td className="p-2 border">{p.full_name}</td>
                   <td className="p-2 border">{p.email || "—"}</td>
                   <td className="p-2 border">{p.cell_phone || "—"}</td>
+                  <td className="p-2 border text-center">{p.visit_count || 0}</td>
+                  <td className="p-2 border">
+                    {p.last_appointment
+                      ? new Date(p.last_appointment).toLocaleDateString()
+                      : "—"}
+                  </td>
                   <td className="p-2 border">
                     <Button
                       size="sm"
@@ -146,18 +171,10 @@ export default function PatientsTab({ providerId }: PatientsTabProps) {
             <Input
               placeholder="Cell Phone"
               value={form.cell_phone || ""}
-              onChange={(e) => {
-                let val = e.target.value.replace(/\D/g, ""); // remove non-digits
-                if (val.length > 3 && val.length <= 6) {
-                  val = val.replace(/(\d{3})(\d+)/, "$1-$2");
-                } else if (val.length > 6) {
-                  val = val.replace(/(\d{3})(\d{3})(\d+)/, "$1-$2-$3");
-                }
-                setForm({ ...form, cell_phone: val });
-              }}
-              maxLength={12} // keeps it at xxx-xxx-xxxx
+              onChange={(e) =>
+                setForm({ ...form, cell_phone: e.target.value })
+              }
             />
-
 
             <div className="flex gap-2">
               <Button onClick={savePatient}>

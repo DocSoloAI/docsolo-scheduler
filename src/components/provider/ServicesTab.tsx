@@ -12,6 +12,7 @@ interface Service {
   is_active: boolean;
   isCustom?: boolean;
   default_for?: "new" | "established" | null;
+  color?: string; // ✅ new
 }
 
 const presetDurations = [15, 20, 30, 45, 60];
@@ -121,7 +122,9 @@ export default function ServicesTab({ providerId, onDirtyChange }: ServicesTabPr
       duration_minutes: s.duration_minutes,
       is_active: s.is_active,
       default_for: s.default_for ?? null,
+      color: s.color || null, // ✅ new
     }));
+
 
     const { error: upsertError } = await supabase
       .from("services")
@@ -249,6 +252,17 @@ export default function ServicesTab({ providerId, onDirtyChange }: ServicesTabPr
               <option value="established">Established Patient</option>
               <option value="new">New Patient</option>
             </select>
+          </div>
+          
+          {/* Service Color */}
+          <div className="mb-4">
+            <label className="block text-sm font-semibold mb-1">Color</label>
+            <input
+              type="color"
+              value={service.color || "#3b82f6"}
+              onChange={(e) => updateService(idx, "color", e.target.value)}
+              className="w-12 h-8 border rounded"
+            />
           </div>
 
           {/* Delete Button */}
