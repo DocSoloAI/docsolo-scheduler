@@ -417,6 +417,7 @@ export default function BookingPage() {
       const end = new Date(start.getTime() + durationMin * 60000);
 
       let appointmentId: string | null = null;
+      let manageToken: string | null = null;
 
       if (rescheduleId) {
         // 🔄 Update existing appointment
@@ -432,6 +433,15 @@ export default function BookingPage() {
 
         if (updateError) throw updateError;
         appointmentId = rescheduleId;
+
+        // 🔑 fetch manage_token for rescheduled appt
+        const { data: existing, error: tokenError } = await supabase
+          .from("appointments")
+          .select("manage_token")
+          .eq("id", rescheduleId)
+          .single();
+        if (tokenError) throw tokenError;
+        manageToken = existing?.manage_token ?? null;
       } else {
         // 🆕 Use helper for patient upsert + appointment insert
         const newAppt = await upsertPatientAndCreateAppointment(
@@ -452,9 +462,10 @@ export default function BookingPage() {
         );
 
         appointmentId = newAppt.id;
+        manageToken = newAppt.manage_token; // ✅ capture token
       }
 
-      if (!appointmentId) throw new Error("Appointment ID missing");
+      if (!appointmentId || !manageToken) throw new Error("Appointment ID or token missing");
 
       // 2. Emails
       const fullName = `${firstName} ${lastName}`;
@@ -473,7 +484,7 @@ export default function BookingPage() {
           time: formattedTime,
           service: service.name,
           appointmentId,
-          manageLink: `https://${getSubdomain()}.bookthevisit.com/manage/${appointmentId}`,
+          manageLink: `https://${getSubdomain()}.bookthevisit.com/manage/${appointmentId}?token=${manageToken}`,
           location: [providerStreet, providerCity, providerState, providerZip]
             .filter(Boolean)
             .join(", "),
