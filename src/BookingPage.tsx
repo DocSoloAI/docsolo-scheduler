@@ -1067,13 +1067,13 @@ export default function BookingPage() {
             <div className="flex flex-col sm:flex-row justify-center gap-4 mt-4 w-full max-w-sm mx-auto">
               <a
                 href={`https://${getSubdomain()}.bookthevisit.com`}
-                className="inline-block border border-gray-300 text-gray-700 hover:bg-gray-50 text-sm w-full sm:flex-1 text-center rounded-full py-2 px-4 font-medium"
+                className="inline-block bg-blue-600 hover:bg-blue-700 text-white text-sm w-full sm:flex-1 text-center rounded-full py-2 px-4 font-medium"
               >
                 Schedule Another Appointment
               </a>
               <a
                 href={`https://${getSubdomain()}.bookthevisit.com/manage/${appointmentId}?token=${manageToken}`}
-                className="inline-block bg-blue-600 hover:bg-blue-700 text-white text-sm w-full sm:flex-1 text-center rounded-full py-2 px-4 font-medium"
+                className="inline-block border border-red-500 text-red-600 hover:bg-red-50 text-sm w-full sm:flex-1 text-center rounded-full py-2 px-4 font-medium"
               >
                 Change / Cancel this Appointment
               </a>
