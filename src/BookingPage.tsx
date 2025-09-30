@@ -1065,16 +1065,15 @@ export default function BookingPage() {
             </p>
 
             <div className="flex flex-col sm:flex-row justify-center gap-4 mt-4 w-full max-w-sm mx-auto">
-              <Button
-                variant="outline"
-                className="text-sm w-full sm:w-auto text-center rounded-full py-2 px-4"
-                onClick={() => window.location.reload()}
+              <a
+                href={`https://${getSubdomain()}.bookthevisit.com`}
+                className="inline-block border border-gray-300 text-gray-700 hover:bg-gray-50 text-sm w-full sm:flex-1 text-center rounded-full py-2 px-4 font-medium"
               >
-                Reschedule Another Time
-              </Button>
+                Schedule Another Appointment
+              </a>
               <a
                 href={`https://${getSubdomain()}.bookthevisit.com/manage/${appointmentId}?token=${manageToken}`}
-                className="inline-block bg-blue-600 text-white text-sm w-full sm:w-auto text-center rounded-full py-2 px-4 font-medium"
+                className="inline-block bg-blue-600 hover:bg-blue-700 text-white text-sm w-full sm:flex-1 text-center rounded-full py-2 px-4 font-medium"
               >
                 Change / Cancel this Appointment
               </a>
