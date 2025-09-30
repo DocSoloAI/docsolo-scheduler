@@ -1144,43 +1144,64 @@ export default function BookingPage() {
                 exit={{ scale: 0.9 }}
                 className="bg-white rounded-lg shadow-lg max-w-md w-full p-6 text-center"
               >
-                <p className="mb-4 text-gray-700 font-medium">
-                  Please carefully double-check your details:
-                </p>
-                <p className="font-semibold text-lg">{firstName} {lastName}</p>
-                <p className="font-semibold text-gray-800">{email}</p>
-                {cellPhone && (
-                  <p className="text-gray-700">{cellPhone}</p>
-                )}
-                {selectedDate && selectedTime && (
-                  <p className="text-sm text-gray-600 mt-2">
-                    {format(
-                      selectedDate,
-                      selectedDate.getFullYear() === new Date().getFullYear()
-                        ? "EEEE, MMMM d"
-                        : "EEEE, MMMM d, yyyy"
-                    )}{" "}
-                    at {selectedTime}
-                  </p>
-                )}
+                {!confirmed ? (
+                  <>
+                    <p className="mb-4 text-gray-700 font-medium">
+                      Please carefully double-check your details:
+                    </p>
+                    <p className="font-semibold text-lg">
+                      {firstName} {lastName}
+                    </p>
+                    <p className="font-semibold text-gray-800">{email}</p>
+                    {cellPhone && <p className="text-gray-700">{cellPhone}</p>}
+                    {selectedDate && selectedTime && (
+                      <p className="text-sm text-gray-600 mt-2">
+                        {format(
+                          selectedDate,
+                          selectedDate.getFullYear() === new Date().getFullYear()
+                            ? "EEEE, MMMM d"
+                            : "EEEE, MMMM d, yyyy"
+                        )}{" "}
+                        at {selectedTime}
+                      </p>
+                    )}
 
-                <div className="flex gap-3 mt-6">
-                  <Button
-                    className="flex-1 bg-gray-200 text-gray-800"
-                    onClick={() => setShowConfirmModal(false)}
-                  >
-                    Go Back & Fix
-                  </Button>
-                  <Button
-                    className="flex-1 bg-blue-600 text-white"
-                    onClick={() => {
-                      setShowConfirmModal(false);
-                      handleConfirm();
-                    }}
-                  >
-                    Confirm Appointment
-                  </Button>
-                </div>
+                    <div className="flex gap-3 mt-6">
+                      <Button
+                        className="flex-1 bg-gray-200 text-gray-800"
+                        onClick={() => setShowConfirmModal(false)}
+                      >
+                        Go Back & Fix
+                      </Button>
+                      <Button
+                        className="flex-1 bg-blue-600 text-white"
+                        onClick={async () => {
+                          await handleConfirm();
+                          // keep modal open, just flip to success view
+                        }}
+                      >
+                        Confirm Appointment
+                      </Button>
+                    </div>
+                  </>
+                ) : (
+                  // ✅ Success view replaces double-check content
+                  <div>
+                    <div className="text-6xl mb-4">✅</div>
+                    <h2 className="text-2xl font-bold text-green-700 mb-4">
+                      Appointment Confirmed
+                    </h2>
+                    <p className="text-gray-700 mb-4">
+                      We’ve emailed you the details of your appointment.
+                    </p>
+                    <Button
+                      className="bg-blue-600 text-white"
+                      onClick={() => setShowConfirmModal(false)}
+                    >
+                      Close
+                    </Button>
+                  </div>
+                )}
               </motion.div>
             </motion.div>
           )}
