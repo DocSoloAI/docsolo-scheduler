@@ -64,6 +64,15 @@ export default function App() {
             </BookingWithProvider>
           }
         />
+        {/* ✅ alias route for reschedules */}
+        <Route
+          path="/booking"
+          element={
+            <BookingWithProvider>
+              <BookingPage />
+            </BookingWithProvider>
+          }
+        />
         <Route
           path="/manage/:appointmentId"
           element={

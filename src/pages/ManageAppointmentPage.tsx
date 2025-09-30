@@ -201,7 +201,7 @@ export default function ManageAppointmentPage() {
 
   const handleReschedule = () => {
     if (!appointment) return;
-    navigate(`/booking?reschedule=${appointment.id}`);
+    navigate(`/?reschedule=${appointment.id}`);
   };
 
   if (!appointmentId || !token) {
