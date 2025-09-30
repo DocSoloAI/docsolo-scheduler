@@ -28,6 +28,8 @@ export default function BookingPage() {
   const [providerZip, setProviderZip] = useState("");
   const [appointmentId, setAppointmentId] = useState<string | null>(null);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [bookingComplete, setBookingComplete] = useState(false);
+  const [manageToken, setManageToken] = useState<string | null>(null);
 
   const [searchParams] = useSearchParams();
   const rescheduleId = searchParams.get("reschedule");
@@ -524,6 +526,9 @@ export default function BookingPage() {
       // 3. Mark confirmed
       setAppointmentId(appointmentId);
       setConfirmed(true);
+      setBookingComplete(true);
+      setManageToken(manageToken);
+
     } catch (err) {
       console.error("Booking error:", err);
       alert("Something went wrong booking your appointment.");
@@ -540,8 +545,7 @@ export default function BookingPage() {
     <div className="max-w-3xl mx-auto p-8 min-h-screen bg-gradient-to-br from-gray-50 to-slate-100">
       <AnimatePresence>
         {/* 👇 Hide booking UI after confirmed */}
-        {!confirmed && providerOfficeName && (
-          <>
+        {!bookingComplete && providerOfficeName && (          <>
             {/* Page header */}
             <h1 className="text-4xl font-extrabold text-blue-700 mb-10 text-center animate-fadeIn">
               {providerOfficeName}
@@ -1047,88 +1051,37 @@ export default function BookingPage() {
           </>
         )}
 
-        {/* Confirmation Splash */}
-        {confirmed && (
-          <motion.div
-            key="confirmation"
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4 }}
-            className="mb-10"
-          >
-            <Card className="bg-gradient-to-br from-green-50 to-green-100 border-green-300">
-              <CardContent className="p-8 text-center">
-                <motion.div
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  transition={{ type: "spring", stiffness: 200, damping: 12 }}
-                  className="text-6xl mb-4"
-                >
-                  ✅
-                </motion.div>
-                <h2 className="text-2xl font-bold text-green-700 mb-2">
-                  {rescheduleId ? "Appointment Updated" : "Appointment Confirmed"}
-                </h2>
+        {bookingComplete && confirmed && (
+          <div className="bg-green-100 text-green-800 p-6 rounded-lg text-center mt-12 max-w-xl mx-auto">
+            <p className="text-2xl font-bold mb-2">
+              {rescheduleId ? "Appointment Updated" : "Appointment Confirmed"}
+            </p>
+            <p className="text-lg mb-1">
+              {format(selectedDate!, "EEEE, MMMM d")} at {selectedTime}
+            </p>
+            <p className="mb-2 text-base capitalize">{patientType} Patient</p>
+            <p className="mb-4 text-sm text-gray-700">
+              A confirmation email will be sent shortly.
+            </p>
 
-                {/* Appointment details */}
-                {selectedDate && selectedTime && (
-                  <p className="text-gray-700 font-medium mt-2">
-                    {format(
-                      selectedDate,
-                      selectedDate.getFullYear() === new Date().getFullYear()
-                        ? "EEEE, MMMM d"
-                        : "EEEE, MMMM d, yyyy"
-                    )}{" "}
-                    at {selectedTime}                    
-                  </p>
-                )}
-                {services.find((s) => s.default_for === patientType)?.name && (
-                  <p className="text-gray-600 mt-1">
-                    {
-                      services.find((s) => s.default_for === patientType)
-                        ?.name
-                    }
-                  </p>
-                )}
-
-                <p className="text-gray-600 mt-4">
-                  A confirmation email will be sent shortly.
-                </p>
-
-                <div className="flex justify-center gap-4 mt-6">
-                  <Button
-                    className="min-w-[200px] bg-blue-600 hover:bg-blue-700 text-white"
-                    onClick={() => {
-                      setConfirmed(false);
-                      setSelectedDate(undefined);
-                      setSelectedTime(null);
-                      setFirstName("");
-                      setLastName("");
-                      setEmail("");
-                      setCellPhone("");
-                    }}
-                  >
-                    {rescheduleId ? "Reschedule Another Time" : "Book Another Visit"}
-                  </Button>
-
-
-                  {appointmentId && (
-                    <Button
-                      variant="outline"
-                      className="min-w-[200px]"
-                      onClick={() => {
-                        window.location.href = `https://${getSubdomain()}.bookthevisit.com/manage/${appointmentId}`;
-                      }}
-                    >
-                      Change / Cancel this Appointment
-                    </Button>
-                  )}
-
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
+            <div className="flex flex-col sm:flex-row justify-center gap-4 mt-4 w-full max-w-sm mx-auto">
+              <Button
+                variant="outline"
+                className="text-sm w-full sm:w-auto whitespace-normal break-words text-center"
+                onClick={() => window.location.reload()}
+              >
+                Reschedule Another Time
+              </Button>
+              <a
+                href={`https://${getSubdomain()}.bookthevisit.com/manage/${appointmentId}?token=${manageToken}`}
+                className="inline-block bg-blue-600 text-white px-4 py-2 rounded-full text-sm font-medium w-full sm:w-auto text-center whitespace-normal break-words"
+              >
+                Change / Cancel this Appointment
+              </a>
+            </div>
+          </div>
         )}
+
         {/* 🔽 Final Confirmation Modal */}
         <AnimatePresence>
           {showConfirmModal && (
