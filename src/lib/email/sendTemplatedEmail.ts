@@ -2,8 +2,8 @@
 
 interface AppointmentData {
   patientName: string;
-  patientEmail?: string;   // 👈 ADD
-  patientPhone?: string;   // 👈 ADD
+  patientEmail?: string;   // 👈 already here
+  patientPhone?: string;   // 👈 already here
   date: string;
   time: string;
   service: string;
@@ -16,6 +16,7 @@ interface AppointmentData {
   announcement?: string;
   logoUrl?: string;
   patientNote?: string;
+  subdomain?: string;      // 👈 NEW — needed for cancellation email booking link
 }
 
 

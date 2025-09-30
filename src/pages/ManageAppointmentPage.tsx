@@ -111,7 +111,7 @@ export default function ManageAppointmentPage() {
         start_time,
         services ( name ),
         patients ( first_name, last_name, email ),
-        providers ( id, office_name, email )
+        providers ( id, office_name, email, phone, street, city, state, zip )
       `)
       .eq("id", appointment.id)
       .single();
@@ -161,12 +161,19 @@ export default function ManageAppointmentPage() {
                 time: formattedTime,
                 service: service?.name,
                 appointmentId: appt.id,
-                manageLink: `https://${getSubdomain()}.bookthevisit.com/manage/${appt.id}`,
+                subdomain: getSubdomain(), // 👈 NEW — used in template for booking link
+                providerName: provider?.office_name,
+                providerPhone: provider?.phone,
+                location: [provider.street, provider.city, provider.state, provider.zip]
+                  .filter(Boolean)
+                  .join(", "),
               },
             }),
           }
         );
       }
+
+
 
       // Provider cancellation notification (Edge Function)
       if (providerEmail) {

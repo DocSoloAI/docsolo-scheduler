@@ -536,9 +536,6 @@ export default function BookingPage() {
   };
 
 
-
-
-
   const serviceDescription = services.find(s => s.default_for === patientType)?.description;
 
   return (

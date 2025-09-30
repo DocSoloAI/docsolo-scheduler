@@ -103,7 +103,11 @@ ${DISCLAIMER_TEXT}`,
       subject: "Appointment cancelled: {{date}} at {{time}}",
       body: `Your appointment on {{date}} at {{time}} has been cancelled.
 
-${DISCLAIMER_TEXT}`,
+    If you’d like to schedule another appointment, visit: https://{{subdomain}}.bookthevisit.com
+
+    Questions? Call {{providerPhone}}.
+
+    ${DISCLAIMER_TEXT}`,
       html_body: `
         <div style="font-family: system-ui, sans-serif; max-width: 600px; margin: auto; color: #111;">
           <h2 style="font-size: 1rem; font-weight: 500; color: #dc2626; margin-bottom: 1em;">
@@ -112,24 +116,26 @@ ${DISCLAIMER_TEXT}`,
 
           <p>The appointment scheduled for <strong>{{date}} at {{time}}</strong> has been cancelled.</p>
 
-          <p>If you'd like to reschedule, use the link below:</p>
+          <p>If you'd like to schedule another appointment, use the link below:</p>
 
           <p>
-            <a href="{{manageLink}}" 
-              style="display: inline-block; margin-top: 1em; padding: 10px 16px; background: #dc2626; color: #fff;
+            <a href="https://{{subdomain}}.bookthevisit.com" 
+              style="display: inline-block; margin-top: 1em; padding: 10px 16px; background: #2563eb; color: #fff;
               text-decoration: none; border-radius: 6px; font-weight: 600;">
-              Reschedule Appointment
+              Schedule Another Appointment
             </a>
           </p>
 
           <p style="margin-top: 2em; font-size: 0.85rem; color: #555;">
-            Questions? Call or text {{providerPhone}}.
+            Questions? Call or text <a href="tel:{{providerPhone}}" style="color:#2563eb;">{{providerPhone}}</a><br/>
+            {{providerName}} – {{location}}
           </p>
 
           ${DISCLAIMER_HTML}
         </div>
       `,
     },
+
 
     // ✅ UPDATE
     {
