@@ -11,7 +11,7 @@ import { SettingsProvider } from "./context/SettingsContext";
 import { supabase } from "./lib/supabaseClient";
 import { useEffect, useState } from "react";
 
-function BookingWithProvider({ page }: { page: "booking" | "manage" }) {
+function BookingWithProvider({ children }: { children: React.ReactNode }) {
   const subdomain = getSubdomain();
   const [providerId, setProviderId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -38,11 +38,7 @@ function BookingWithProvider({ page }: { page: "booking" | "manage" }) {
   if (loading) return <div>Loading...</div>;
   if (!providerId) return <div>Provider not found</div>;
 
-  return (
-    <SettingsProvider providerId={providerId}>
-      {page === "booking" ? <BookingPage /> : <ManageAppointmentPage />}
-    </SettingsProvider>
-  );
+  return <SettingsProvider providerId={providerId}>{children}</SettingsProvider>;
 }
 
 export default function App() {
@@ -60,10 +56,21 @@ export default function App() {
   if (subdomain && hostname.endsWith(patientRoot)) {
     return (
       <Routes>
-        <Route path="/" element={<BookingWithProvider page="booking" />} />
+        <Route
+          path="/"
+          element={
+            <BookingWithProvider>
+              <BookingPage />
+            </BookingWithProvider>
+          }
+        />
         <Route
           path="/manage/:appointmentId"
-          element={<BookingWithProvider page="manage" />}
+          element={
+            <BookingWithProvider>
+              <ManageAppointmentPage />
+            </BookingWithProvider>
+          }
         />
       </Routes>
     );
@@ -87,10 +94,21 @@ export default function App() {
           }
         />
         {/* ✅ Dev-only aliases for testing patient pages locally */}
-        <Route path="/booking" element={<BookingWithProvider page="booking" />} />
+        <Route
+          path="/booking"
+          element={
+            <BookingWithProvider>
+              <BookingPage />
+            </BookingWithProvider>
+          }
+        />
         <Route
           path="/manage/:appointmentId"
-          element={<BookingWithProvider page="manage" />}
+          element={
+            <BookingWithProvider>
+              <ManageAppointmentPage />
+            </BookingWithProvider>
+          }
         />
       </Routes>
     );

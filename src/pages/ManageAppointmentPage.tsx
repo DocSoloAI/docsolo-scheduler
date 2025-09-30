@@ -1,6 +1,6 @@
 // src/pages/ManageAppointmentPage.tsx
 import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/lib/supabaseClient";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -25,7 +25,9 @@ interface Appointment {
 
 export default function ManageAppointmentPage() {
   const { appointmentId } = useParams();
-  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();              // 👈 new
+  const token = searchParams.get("token");      
+    const navigate = useNavigate();
   const [appointment, setAppointment] = useState<Appointment | null>(null);
   const [loading, setLoading] = useState(true);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -48,6 +50,7 @@ export default function ManageAppointmentPage() {
         `
         )
         .eq("id", appointmentId)
+        .eq("manage_token", token) 
         .single();
 
       if (error) {
@@ -201,9 +204,17 @@ export default function ManageAppointmentPage() {
     navigate(`/booking?reschedule=${appointment.id}`);
   };
 
-  if (loading) return <p className="p-6 text-center">Loading...</p>;
-  if (!appointment)
-    return <p className="p-6 text-center">Appointment not found.</p>;
+  if (!appointmentId || !token) {
+    return <p className="p-6 text-center text-red-600">Invalid or missing link.</p>;
+  }
+
+  if (loading) {
+    return <p className="p-6 text-center">Loading...</p>;
+  }
+
+  if (!appointment) {
+    return <p className="p-6 text-center text-red-600">Appointment not found or link expired.</p>;
+  }
 
   return (
     <div className="p-6 flex items-center justify-center min-h-screen bg-gradient-to-br from-gray-50 to-slate-100">
