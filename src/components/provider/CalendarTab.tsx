@@ -692,15 +692,15 @@ export default function CalendarTab({ providerId }: { providerId: string }) {
                   />
                 </div>
 
-                {/* Patient Note */}
-                {editingEvent?.extendedProps?.patient_note && (
+                {/* 🩵 Patient Note (always visible if exists) */}
+                {editingEvent?.patient_note || editingEvent?.extendedProps?.patient_note ? (
                   <div className="space-y-1">
                     <Label>Patient Note</Label>
-                    <div className="p-2 border rounded-md bg-gray-50 text-sm text-gray-700">
-                      {editingEvent.extendedProps.patient_note}
+                    <div className="p-3 border rounded-md bg-gray-50 text-sm text-gray-700 whitespace-pre-wrap">
+                      {editingEvent.patient_note || editingEvent.extendedProps.patient_note}
                     </div>
                   </div>
-                )}
+                ) : null}
               </div>
             </TabsContent>
 

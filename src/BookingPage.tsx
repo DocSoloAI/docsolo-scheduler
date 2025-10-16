@@ -819,66 +819,119 @@ export default function BookingPage() {
                             Date of Birth <span className="text-red-500">*</span>
                           </label>
                           <Input
-                            type="date"
+                            type="tel"
+                            inputMode="numeric"
+                            pattern="[0-9/]*"
+                            placeholder="MM/DD/YYYY"
                             value={birthday}
-                            onChange={(e) => setBirthday(e.target.value)}
+                            onChange={(e) => {
+                              let val = e.target.value.replace(/\D/g, ""); // remove non-numeric
+                              if (val.length > 8) val = val.slice(0, 8);
+
+                              // Auto-format MM/DD/YYYY
+                              if (val.length > 4) val = `${val.slice(0, 2)}/${val.slice(2, 4)}/${val.slice(4)}`;
+                              else if (val.length > 2) val = `${val.slice(0, 2)}/${val.slice(2)}`;
+
+                              setBirthday(val);
+                            }}
+                            onBlur={() => {
+                              if (birthday.length === 10) {
+                                const [mm, dd, yyyy] = birthday.split("/").map((n) => parseInt(n));
+                                const isValid =
+                                  mm >= 1 &&
+                                  mm <= 12 &&
+                                  dd >= 1 &&
+                                  dd <= 31 &&
+                                  yyyy > 1900 &&
+                                  yyyy <= new Date().getFullYear();
+
+                                if (!isValid) {
+                                  alert("Please enter a valid date of birth (MM/DD/YYYY).");
+                                  setBirthday("");
+                                }
+                              }
+                            }}
                             required
+                            className="text-lg tracking-wider"
                           />
                         </div>
                       )}
                     </div>
 
-
-
-                    {/* Row 3: Cell + Home */}
+                    {/* Row 3: Mobile + Home */}
                     <div className="grid md:grid-cols-2 gap-4">
+                      {/* Mobile Phone */}
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Cell Phone <span className="text-red-500">*</span>
+                        <label
+                          htmlFor="cellPhone"
+                          className="block text-sm font-medium text-gray-700 mb-1"
+                        >
+                          Mobile Phone <span className="text-red-500">*</span>
                         </label>
                         <Input
+                          id="cellPhone"
+                          name="cellPhone"
                           type="tel"
-                          placeholder=""
-                          autoComplete="tel"
+                          inputMode="tel"
+                          autoComplete="tel-national"
+                          placeholder="(555) 123-4567"
                           value={cellPhone}
                           onChange={(e) => {
-                            let val = e.target.value.replace(/\D/g, ""); // strip non-digits
+                            let val = e.target.value.replace(/\D/g, ""); // digits only
                             if (val.length > 10) val = val.slice(0, 10);
+
+                            // Format as (###) ###-####
                             let formatted = val;
-                            if (val.length > 6) {
+                            if (val.length > 6)
                               formatted = `(${val.slice(0, 3)}) ${val.slice(3, 6)}-${val.slice(6)}`;
-                            } else if (val.length > 3) {
+                            else if (val.length > 3)
                               formatted = `(${val.slice(0, 3)}) ${val.slice(3)}`;
-                            }
+
                             setCellPhone(formatted);
                           }}
+                          onBlur={() => {
+                            const digits = cellPhone.replace(/\D/g, "");
+                            if (digits.length !== 10) {
+                              alert("Please enter a valid 10-digit mobile number.");
+                              setCellPhone("");
+                            }
+                          }}
                           required
+                          className="text-lg tracking-wide"
                         />
                       </div>
 
+                      {/* Home Phone */}
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <label
+                          htmlFor="homePhone"
+                          className="block text-sm font-medium text-gray-700 mb-1"
+                        >
                           Home Phone
                         </label>
                         <Input
+                          id="homePhone"
+                          name="homePhone"
                           type="tel"
-                          placeholder=""
-                          autoComplete="tel-national"
+                          inputMode="tel"
+                          autoComplete="tel"
+                          placeholder="(555) 123-4567"
                           value={homePhone}
                           onChange={(e) => {
-                            let val = e.target.value.replace(/\D/g, ""); // strip non-digits
+                            let val = e.target.value.replace(/\D/g, "");
                             if (val.length > 10) val = val.slice(0, 10);
                             let formatted = val;
-                            if (val.length > 6) {
+                            if (val.length > 6)
                               formatted = `(${val.slice(0, 3)}) ${val.slice(3, 6)}-${val.slice(6)}`;
-                            } else if (val.length > 3) {
+                            else if (val.length > 3)
                               formatted = `(${val.slice(0, 3)}) ${val.slice(3)}`;
-                            }
                             setHomePhone(formatted);
                           }}
+                          className="text-lg tracking-wide"
                         />
                       </div>
                     </div>
+
 
                     {/* New Patient Only extras */}
                     {patientType === "new" && (
