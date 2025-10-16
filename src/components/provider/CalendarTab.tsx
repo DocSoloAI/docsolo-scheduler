@@ -23,6 +23,19 @@ import {
 } from "@/components/ui/select";
 import { useSettings } from "@/context/SettingsContext";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import {
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandInput,
+  CommandList,
+  CommandEmpty,
+  CommandGroup,
+  CommandItem,
+} from "@/components/ui/command";
 
 // === Email helper ===
 async function sendDualEmail(
@@ -598,7 +611,13 @@ export default function CalendarTab({ providerId }: { providerId: string }) {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {editingEvent ? "Edit" : "Add"} Appointment / Time Off
+              {isTimeOff
+                ? editingEvent
+                  ? "Edit Time Off"
+                  : "Add Time Off"
+                : editingEvent
+                ? "Edit Appointment"
+                : "Add Appointment"}
             </DialogTitle>
             <DialogDescription>
               Fill out the form below to save or update this entry.
@@ -610,36 +629,66 @@ export default function CalendarTab({ providerId }: { providerId: string }) {
             value={activeTab}
             onValueChange={(val) => setActiveTab(val as any)}
           >
-            <TabsList
-              className={`w-full mb-4 ${
-                isTimeOff ? "grid grid-cols-1" : "grid grid-cols-2"
-              }`}
-            >
+            <TabsList className="w-full mb-4 grid grid-cols-1">
               <TabsTrigger value="appointment">Appointment</TabsTrigger>
-              {isTimeOff && <TabsTrigger value="timeoff">Time Off</TabsTrigger>}
+              {!editingEvent && (
+                <TabsTrigger value="timeoff">Time Off</TabsTrigger>
+              )}
             </TabsList>
 
             {/* Appointment Form */}
             <TabsContent value="appointment" className="min-h-[280px]">
               <div className="space-y-3">
                 <div className="space-y-1">
+                  {/* 🧍 Patient Selector */}
                   <Label>Patient</Label>
-                  <Select
-                    value={selectedPatient ?? ""}
-                    onValueChange={(val) => setSelectedPatient(val)}
-                    disabled={isTimeOff}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select patient" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {patients.map((p) => (
-                        <SelectItem key={p.id} value={p.id}>
-                          {p.first_name} {p.last_name} ({p.email})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  {editingEvent ? (
+                    <div className="p-2 border rounded-md bg-gray-50 text-sm text-gray-700">
+                      {patients.find((p) => p.id === selectedPatient)?.first_name}{" "}
+                      {patients.find((p) => p.id === selectedPatient)?.last_name} (
+                      {patients.find((p) => p.id === selectedPatient)?.email})
+                    </div>
+                  ) : (
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          role="combobox"
+                          className="w-full justify-between"
+                        >
+                          {selectedPatient
+                            ? `${patients.find((p) => p.id === selectedPatient)?.first_name ?? ""} ${
+                                patients.find((p) => p.id === selectedPatient)?.last_name ?? ""
+                              }`
+                            : "Select or search patient..."}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[280px] p-0">
+                        <Command>
+                          <CommandInput placeholder="Type to search..." />
+                          <CommandList>
+                            <CommandEmpty>No matches found.</CommandEmpty>
+                            <CommandGroup>
+                              {patients.map((p) => (
+                                <CommandItem
+                                  key={p.id}
+                                  value={p.id}
+                                  onSelect={() => setSelectedPatient(p.id)}
+                                >
+                                  <div className="flex flex-col">
+                                    <span className="font-medium text-sm">
+                                      {p.first_name} {p.last_name}
+                                    </span>
+                                    <span className="text-xs text-gray-500">{p.email}</span>
+                                  </div>
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
+                  )}
 
                   {/* ✅ Show contact info directly under Patient */}
                   {selectedPatient && (
@@ -691,6 +740,43 @@ export default function CalendarTab({ providerId }: { providerId: string }) {
                     }
                   />
                 </div>
+                
+                {/* 🕓 Date & Time (edit existing appointment) */}
+                {!isTimeOff && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <Label>Date</Label>
+                      <Input
+                        type="date"
+                        value={new Date(selectedDate ?? "").toISOString().split("T")[0]}
+                        onChange={(e) => {
+                          const d = new Date(e.target.value);
+                          const t = new Date(selectedDate ?? new Date());
+                          d.setHours(t.getHours(), t.getMinutes());
+                          setSelectedDate(d.toISOString());
+                        }}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Time</Label>
+                      <Input
+                        type="time"
+                        value={new Date(selectedDate ?? "").toLocaleTimeString([], {
+                          hour12: false,
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                        onChange={(e) => {
+                          const [h, m] = e.target.value.split(":").map(Number);
+                          const d = new Date(selectedDate ?? new Date());
+                          d.setHours(h, m);
+                          setSelectedDate(d.toISOString());
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
+
 
                 {/* 🩵 Patient Note (always visible if exists) */}
                 {editingEvent?.patient_note || editingEvent?.extendedProps?.patient_note ? (
