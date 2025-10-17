@@ -22,7 +22,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useSettings } from "@/context/SettingsContext";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Popover,
   PopoverTrigger,
@@ -151,7 +150,12 @@ export default function CalendarTab({ providerId }: { providerId: string }) {
   );
 
   const { services, patients, loading, reload } = useSettings();
+  const [isDirty, setIsDirty] = useState(false);
+  const [showDiscardDialog, setShowDiscardDialog] = useState(false);
 
+  // 🧠 Helper to mark form as dirty on any change
+  const markDirty = () => setIsDirty(true);
+  
   const safeReload = async () => {
     console.log("🔄 safeReload called (view state =", currentView, ")");
     await reload();
@@ -159,9 +163,6 @@ export default function CalendarTab({ providerId }: { providerId: string }) {
 
   const [events, setEvents] = useState<AppointmentEvent[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<"appointment" | "timeoff">(
-    "appointment"
-  );
 
   const [editingEvent, setEditingEvent] = useState<any | null>(null);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
@@ -259,8 +260,10 @@ export default function CalendarTab({ providerId }: { providerId: string }) {
   };
 
   useEffect(() => {
+    // 🧭 Initial load
     loadEvents();
 
+    // 🪄 Subscribe to realtime updates for both appointments and time_off
     const channel = supabase
       .channel("calendar-realtime")
       .on(
@@ -272,7 +275,7 @@ export default function CalendarTab({ providerId }: { providerId: string }) {
           filter: `provider_id=eq.${providerId}`,
         },
         async () => {
-          console.log("🔄 Realtime: appointments changed → fetching fresh data");
+          console.log("🔄 Realtime: appointments changed → refreshing calendar");
           await loadEvents();
         }
       )
@@ -285,16 +288,19 @@ export default function CalendarTab({ providerId }: { providerId: string }) {
           filter: `provider_id=eq.${providerId}`,
         },
         async () => {
-          console.log("🔄 Realtime: time_off changed → fetching fresh data");
+          console.log("🔄 Realtime: time_off changed → refreshing calendar");
           await loadEvents();
         }
       )
       .subscribe();
 
+    // 🧹 Cleanup on unmount
     return () => {
       supabase.removeChannel(channel);
     };
   }, [providerId]);
+
+
 
   const resetForm = () => {
     setModalOpen(false);
@@ -315,13 +321,13 @@ export default function CalendarTab({ providerId }: { providerId: string }) {
       setSelectedDate(start.toISOString());
       setDuration(1440);
       setIsTimeOff(true);
-      setActiveTab("timeoff");
+      setIsTimeOff(true);
     } else {
       const start = new Date(info.date);
       setSelectedDate(start.toISOString());
       setDuration(30);
       setIsTimeOff(false);
-      setActiveTab("appointment");
+      setIsTimeOff(false);
     }
 
     setModalOpen(true);
@@ -361,7 +367,7 @@ export default function CalendarTab({ providerId }: { providerId: string }) {
     );
 
     setIsTimeOff(isOff);
-    setActiveTab(isOff ? "timeoff" : "appointment");
+    setIsTimeOff(isOff);
     setModalOpen(true);
   };
 
@@ -496,80 +502,127 @@ export default function CalendarTab({ providerId }: { providerId: string }) {
   const handleDelete = async () => {
     if (!editingEvent) return;
 
-    if (editingEvent.status === "time_off") {
-      await supabase.from("time_off").delete().eq("id", editingEvent.id);
-      await loadEvents(); // ✅ immediately refresh events
+    try {
+      const isTimeOffDelete = editingEvent.status === "time_off";
+      const table = isTimeOffDelete ? "appointments" : "appointments"; // both live in same table now
+
+      // 🗑️ Delete the record
+      const { error } = await supabase
+        .from(table)
+        .delete()
+        .eq("id", editingEvent.id);
+
+      if (error) throw error;
+
+      // ✅ Update local state immediately
+      setEvents((prev) => prev.filter((e) => e.id !== editingEvent.id));
+
+      // ✅ Reset form & close modal
       resetForm();
-      console.log("🗑️ Deleted time-off block");
-      return;
-    }
+      setModalOpen(false);
+      setEditingEvent(null);
 
-    const { data: appts, error: apptError } = await supabase
-      .from("appointments")
-      .select(
-        "id, start_time, patients(first_name,last_name,email), services(name)"
-      )
-      .eq("id", editingEvent.id);
-
-    const appt = appts?.[0] || null;
-    if (apptError) {
-      console.error(
-        "❌ Could not fetch appointment before delete:",
-        apptError.message
+      console.log(
+        isTimeOffDelete
+          ? "🗑️ Deleted time-off block"
+          : "🗑️ Deleted appointment"
       );
-    }
 
-    await supabase.from("appointments").delete().eq("id", editingEvent.id);
-    await loadEvents(); // ✅ refresh events immediately
-    resetForm();
+      // ✉️ Send cancellation email for appointments only
+      if (!isTimeOffDelete) {
+        const { data: apptData, error: apptError } = await supabase
+          .from("appointments")
+          .select(
+            "id, start_time, patients(first_name,last_name,email), services(name)"
+          )
+          .eq("id", editingEvent.id);
 
-    if (appt) {
-      await sendDualEmail("cancellation", providerId, appt);
+        if (apptError) {
+          console.error("❌ Could not fetch appointment for email:", apptError.message);
+        } else if (apptData && apptData.length > 0) {
+          await sendDualEmail("cancellation", providerId, apptData[0]);
+          console.log("✉️ Sent cancellation email to patient + provider");
+        }
+      }
+
+      // ✅ Optional: trigger full reload if calendar is server-driven
+      await loadEvents();
+
+    } catch (err: any) {
+      console.error("❌ Error deleting:", err);
+      alert("Error deleting: " + err.message);
     }
-    console.log("🗑️ Deleted appointment and sent cancellation email");
   };
+  
+  // 🧩 Patch: freeze FullCalendar's scrollbar compensation once mounted
+  useEffect(() => {
+    if (!calendarRef.current) return;
 
+    const calendarApi = calendarRef.current.getApi();
+    const origUpdateSize = calendarApi.updateSize;
+
+    // Override updateSize to ignore fake scrollbar width changes
+    calendarApi.updateSize = function () {
+      const scrollEls = document.querySelectorAll('.fc-scroller');
+      scrollEls.forEach((el) => {
+        (el as HTMLElement).style.paddingRight = "0px";
+        (el as HTMLElement).style.marginRight = "0px";
+      });
+      try {
+        return origUpdateSize.call(this);
+      } catch (e) {
+        console.warn("🧩 updateSize patch caught:", e);
+      }
+    };
+
+    console.log("🧩 FullCalendar updateSize patched");
+  }, []);
 
   if (loading) return <div className="p-4 text-gray-500">Loading calendar…</div>;
 
+
   return (
     <div className="p-2">
-      <FullCalendar
-        ref={calendarRef}
-        plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
-        initialView={currentView}
-        headerToolbar={{
-          left: "prev,next today",
-          center: "title",
-          right: "dayGridMonth,timeGridWeek,timeGridDay",
-        }}
-        slotMinTime="08:00:00"
-        slotMaxTime="20:00:00"
-        height="auto"
-        fixedWeekCount={true}
-        showNonCurrentDates={true}
-        hiddenDays={[]}
-        selectable
-        select={handleSelect}
-        editable
-        events={events}
-        dateClick={handleDateClick}
-        eventClick={handleEventClick}
-        eventDrop={handleEventDrop}
-        eventContent={renderEventContent}
-        viewDidMount={(arg) => setCurrentView(arg.view.type)}
-        views={{
-          dayGridMonth: { dayHeaderFormat: { weekday: "short" } },
-          timeGridWeek: { dayHeaderFormat: { weekday: "short", day: "numeric" } },
-          timeGridDay: { dayHeaderFormat: { weekday: "long", day: "numeric" } },
-        }}
-        dayCellContent={(arg) => {
-          if (arg.view.type === "dayGridMonth") {
-            const dayEvents = events.filter((e) => {
-              if (!e.start) return false;
-              const eventDate = new Date(e.start as string).toDateString();
-              return eventDate === arg.date.toDateString();
-            });
+      <div className="calendar-wrapper relative w-full overflow-hidden">
+        <FullCalendar
+          ref={calendarRef}
+          plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
+          initialView={currentView}
+          headerToolbar={{
+            left: "prev,next today",
+            center: "title",
+            right: "dayGridMonth,timeGridWeek,timeGridDay",
+          }}
+          slotMinTime="08:00:00"
+          slotMaxTime="20:00:00"
+          height="auto"
+          fixedWeekCount={true}
+          showNonCurrentDates={true}
+          hiddenDays={[]}
+          selectable
+          select={handleSelect}
+          editable
+          events={events}
+          dateClick={handleDateClick}
+          eventClick={handleEventClick}
+          eventDrop={handleEventDrop}
+          eventContent={renderEventContent}
+          viewDidMount={(arg) => setCurrentView(arg.view.type)}
+          handleWindowResize={false}   // 👈 stops FullCalendar from re-measuring
+
+          views={{
+            dayGridMonth: { dayHeaderFormat: { weekday: "short" } },
+            timeGridWeek: { dayHeaderFormat: { weekday: "short", day: "numeric" } },
+            timeGridDay: { dayHeaderFormat: { weekday: "long", day: "numeric" } },
+          }}
+          dayCellContent={(arg) => {
+            if (arg.view.type === "dayGridMonth") {
+              const dayEvents = events.filter((e) => {
+                if (!e.start) return false;
+                const eventDate = new Date(e.start as string).toDateString();
+                return eventDate === arg.date.toDateString();
+              });
+
 
             const bookedCount = dayEvents.filter(
               (e) => e.extendedProps?.status === "booked"
@@ -602,341 +655,356 @@ export default function CalendarTab({ providerId }: { providerId: string }) {
           // ✅ For week/day views, let FullCalendar handle defaults
           return arg.dayNumberText;
         }}
-
-
       />
 
       {/* Appointment Modal */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {isTimeOff
-                ? editingEvent
-                  ? "Edit Time Off"
-                  : "Add Time Off"
-                : editingEvent
-                ? "Edit Appointment"
-                : "Add Appointment"}
-            </DialogTitle>
-            <DialogDescription>
-              Fill out the form below to save or update this entry.
-            </DialogDescription>
+        <DialogContent
+          onOpenAutoFocus={(e) => e.preventDefault()}
+          className="sm:max-w-lg w-full max-h-[90vh] flex flex-col overflow-hidden rounded-xl shadow-lg bg-white"
+        >
+          {/* Fixed Header — only shows for editing */}
+          <DialogHeader className="shrink-0 border-b border-gray-200 px-6 py-3 bg-white sticky top-0 z-10">
+            {editingEvent && (
+              <DialogTitle className="text-lg font-semibold">
+                {isTimeOff ? "Edit Time Off" : "Edit Appointment"}
+              </DialogTitle>
+            )}
           </DialogHeader>
 
-          {/* Tabs for appointment vs time off */}
-          <Tabs
-            value={activeTab}
-            onValueChange={(val) => setActiveTab(val as any)}
-          >
-            <TabsList className="w-full mb-4 grid grid-cols-1">
-              <TabsTrigger value="appointment">Appointment</TabsTrigger>
-              {!editingEvent && (
-                <TabsTrigger value="timeoff">Time Off</TabsTrigger>
-              )}
-            </TabsList>
 
-            {/* Appointment Form */}
-            <TabsContent value="appointment" className="min-h-[280px]">
-              <div className="space-y-3">
-                <div className="space-y-1">
+          {/* ===== Scrollable Body ===== */}
+          <div className="flex-1 overflow-y-auto px-6 py-4">
+            {/* 🧭 Mode Selector — only visible when creating new entry */}
+            {!editingEvent && (
+              <div className="mt-2 mb-6 text-center">
+                <p className="text-sm text-gray-500 mb-3">
+                  What would you like to add?
+                </p>
+                <div className="flex justify-center gap-3">
+                  <button
+                    onClick={() => {
+                      setIsTimeOff(false);
+                      markDirty();
+                    }}
+                    className={`flex-1 max-w-[160px] py-2.5 rounded-lg font-medium border transition-all duration-150 ${
+                      !isTimeOff
+                        ? "bg-blue-600 text-white border-blue-600 shadow-sm"
+                        : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
+                    }`}
+                  >
+                    Appointment
+                  </button>
+                  <button
+                    onClick={() => {
+                      setIsTimeOff(true);
+                      markDirty();
+                    }}
+                    className={`flex-1 max-w-[160px] py-2.5 rounded-lg font-medium border transition-all duration-150 ${
+                      isTimeOff
+                        ? "bg-blue-600 text-white border-blue-600 shadow-sm"
+                        : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
+                    }`}
+                  >
+                    Time Off
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* 🧩 Conditional forms */}
+            <div className="animate-fadeIn transition-all duration-300">
+              {isTimeOff ? (
+                // 🕒 Time Off Form
+                <div className="space-y-4">
+                  <div>
+                    <Label>Time Off Type</Label>
+                    <Select
+                      value={timeOffMode}
+                      onValueChange={(val) => {
+                        setTimeOffMode(val as any);
+                        markDirty();
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="hours">Partial Day (hours)</SelectItem>
+                        <SelectItem value="day">Full Day</SelectItem>
+                        <SelectItem value="range">Date Range</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {/* You can keep your existing time-off date/time inputs here */}
+                </div>
+              ) : (
+                // 💬 Appointment Form
+                <div className="space-y-5">
                   {/* 🧍 Patient Selector */}
-                  <Label>Patient</Label>
-                  {editingEvent ? (
-                    <div className="p-2 border rounded-md bg-gray-50 text-sm text-gray-700">
-                      {patients.find((p) => p.id === selectedPatient)?.first_name}{" "}
-                      {patients.find((p) => p.id === selectedPatient)?.last_name} (
-                      {patients.find((p) => p.id === selectedPatient)?.email})
-                    </div>
-                  ) : (
-                    <Popover>
-                      <PopoverTrigger asChild>
+                  <div className="space-y-1">
+                    <Label>Patient</Label>
+                    {selectedPatient ? (
+                      <div className="p-3 border rounded-md bg-gray-50 flex justify-between items-center">
+                        <div>
+                          <p className="font-medium text-gray-800">
+                            {patients.find((p) => p.id === selectedPatient)?.first_name}{" "}
+                            {patients.find((p) => p.id === selectedPatient)?.last_name}
+                          </p>
+                          <p className="text-sm text-gray-500">
+                            {patients.find((p) => p.id === selectedPatient)?.email}
+                          </p>
+                        </div>
                         <Button
                           variant="outline"
-                          role="combobox"
-                          className="w-full justify-between"
+                          size="sm"
+                          onClick={() => setSelectedPatient("")}
+                          className="ml-3 text-xs"
                         >
-                          {selectedPatient
-                            ? `${patients.find((p) => p.id === selectedPatient)?.first_name ?? ""} ${
-                                patients.find((p) => p.id === selectedPatient)?.last_name ?? ""
-                              }`
-                            : "Select or search patient..."}
+                          Change
                         </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-[280px] p-0">
-                        <Command>
-                          <CommandInput placeholder="Type to search..." />
-                          <CommandList>
-                            <CommandEmpty>No matches found.</CommandEmpty>
-                            <CommandGroup>
-                              {patients.map((p) => (
-                                <CommandItem
-                                  key={p.id}
-                                  value={p.id}
-                                  onSelect={() => setSelectedPatient(p.id)}
-                                >
-                                  <div className="flex flex-col">
-                                    <span className="font-medium text-sm">
-                                      {p.first_name} {p.last_name}
-                                    </span>
-                                    <span className="text-xs text-gray-500">{p.email}</span>
-                                  </div>
-                                </CommandItem>
-                              ))}
-                            </CommandGroup>
-                          </CommandList>
-                        </Command>
-                      </PopoverContent>
-                    </Popover>
-                  )}
+                      </div>
+                    ) : (
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            role="combobox"
+                            className="w-full justify-between"
+                          >
+                            Select or search patient...
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[300px] p-0 max-h-[260px] overflow-y-auto rounded-md shadow-md">
+                          <Command>
+                            <CommandInput placeholder="Type a name or email..." />
+                            <CommandList>
+                              <CommandEmpty>No matches found.</CommandEmpty>
+                              <CommandGroup>
+                                {patients.map((p) => (
+                                  <CommandItem
+                                    key={p.id}
+                                    value={`${p.first_name} ${p.last_name} ${p.email}`}
+                                    onSelect={() => setSelectedPatient(p.id)}
+                                  >
+                                    <div className="flex flex-col">
+                                      <span className="font-medium text-sm">
+                                        {p.first_name} {p.last_name}
+                                      </span>
+                                      <span className="text-xs text-gray-500">
+                                        {p.email}
+                                      </span>
+                                    </div>
+                                  </CommandItem>
+                                ))}
+                              </CommandGroup>
+                            </CommandList>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
+                    )}
+                  </div>
 
-                  {/* ✅ Show contact info directly under Patient */}
-                  {selectedPatient && (
-                    <div className="text-sm text-gray-600 mt-1">
-                      <p>
-                        Email:{" "}
-                        {patients.find((p) => p.id === selectedPatient)?.email || "—"}
-                      </p>
-                      <p>
-                        Phone:{" "}
-                        {patients.find((p) => p.id === selectedPatient)?.cell_phone || "—"}
-                      </p>
-                    </div>
-                  )}
-                </div>
+                  {/* 💼 Service */}
+                  <div className="space-y-1">
+                    <Label>Service</Label>
+                    <Select
+                      value={selectedService ?? ""}
+                      onValueChange={(val) => {
+                        setSelectedService(val);
+                        const svc = services.find((s) => s.id === val);
+                        if (svc?.duration_minutes)
+                          setDuration(svc.duration_minutes);
+                        markDirty();
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select service" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {services.map((s) => (
+                          <SelectItem key={s.id} value={s.id}>
+                            {s.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-                <div className="space-y-1">
-                  <Label>Service</Label>
-                  <Select
-                    value={selectedService ?? ""}
-                    onValueChange={(val) => {
-                      setSelectedService(val);
-                      const svc = services.find((s) => s.id === val);
-                      if (svc?.duration_minutes) setDuration(svc.duration_minutes);
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select service" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {services.map((s) => (
-                        <SelectItem key={s.id} value={s.id}>
-                          {s.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                  {/* ⏱ Duration */}
+                  <div className="space-y-1">
+                    <Label>Duration (minutes)</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={480}
+                      value={duration === 0 ? "" : duration}
+                      onChange={(e) =>
+                        setDuration(
+                          e.target.value === "" ? 0 : Number(e.target.value)
+                        )
+                      }
+                    />
+                  </div>
 
-                <div className="space-y-1">
-                  <Label>Duration (minutes)</Label>
-                  <Input
-                    type="number"
-                    min={1}
-                    max={480}
-                    value={duration === 0 ? "" : duration}
-                    onChange={(e) =>
-                      setDuration(e.target.value === "" ? 0 : Number(e.target.value))
-                    }
-                  />
-                </div>
-                
-                {/* 🕓 Date & Time (edit existing appointment) */}
-                {!isTimeOff && (
-                  <div className="grid grid-cols-2 gap-4">
+                  {/* 🗓 Date & Time */}
+                  <div className="grid grid-cols-2 gap-4 items-end">
                     <div className="space-y-1">
                       <Label>Date</Label>
                       <Input
                         type="date"
-                        value={new Date(selectedDate ?? "").toISOString().split("T")[0]}
+                        className="cursor-pointer"
+                        value={
+                          selectedDate
+                            ? (() => {
+                                const d = new Date(selectedDate);
+                                const local = new Date(
+                                  d.getTime() - d.getTimezoneOffset() * 60000
+                                );
+                                return local.toISOString().split("T")[0];
+                              })()
+                            : ""
+                        }
                         onChange={(e) => {
-                          const d = new Date(e.target.value);
-                          const t = new Date(selectedDate ?? new Date());
-                          d.setHours(t.getHours(), t.getMinutes());
-                          setSelectedDate(d.toISOString());
+                          const value = e.target.value;
+                          if (!value) return;
+                          const [y, m, day] = value.split("-").map(Number);
+                          const current = selectedDate
+                            ? new Date(selectedDate)
+                            : new Date();
+                          const newDate = new Date(
+                            y,
+                            m - 1,
+                            day,
+                            current.getHours(),
+                            current.getMinutes()
+                          );
+                          setSelectedDate(newDate.toISOString());
+                          setIsDirty(true);
                         }}
                       />
+                      <p className="text-xs text-gray-500">
+                        Tap to change date
+                      </p>
                     </div>
+
                     <div className="space-y-1">
                       <Label>Time</Label>
-                      <Input
-                        type="time"
-                        value={new Date(selectedDate ?? "").toLocaleTimeString([], {
-                          hour12: false,
-                          hour: "2-digit",
-                          minute: "2-digit",
+                      <select
+                        className="w-full border rounded-md p-2 text-sm bg-white cursor-pointer focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        value={
+                          selectedDate
+                            ? (() => {
+                                const d = new Date(selectedDate);
+                                let hours = d.getHours();
+                                const minutes = d.getMinutes();
+                                const ampm = hours >= 12 ? "PM" : "AM";
+                                hours = hours % 12 || 12;
+                                return `${hours}:${minutes
+                                  .toString()
+                                  .padStart(2, "0")} ${ampm}`;
+                              })()
+                            : ""
+                        }
+                        onChange={(e) => {
+                          const [time, ampm] = e.target.value.split(" ");
+                          let [hours, minutes] = time.split(":").map(Number);
+                          if (ampm === "PM" && hours < 12) hours += 12;
+                          if (ampm === "AM" && hours === 12) hours = 0;
+                          const updated = selectedDate
+                            ? new Date(selectedDate)
+                            : new Date();
+                          updated.setHours(hours, minutes, 0, 0);
+                          setSelectedDate(updated.toISOString());
+                          setIsDirty(true);
+                        }}
+                      >
+                        <option value="">Select time...</option>
+                        {Array.from({ length: 24 * 4 }, (_, i) => {
+                          const totalMinutes = i * 15;
+                          const hours24 = Math.floor(totalMinutes / 60);
+                          const minutes = totalMinutes % 60;
+                          const ampm = hours24 >= 12 ? "PM" : "AM";
+                          const displayHour = hours24 % 12 || 12;
+                          const label = `${displayHour}:${minutes
+                            .toString()
+                            .padStart(2, "0")} ${ampm}`;
+                          return (
+                            <option key={i} value={label}>
+                              {label}
+                            </option>
+                          );
                         })}
-                        onChange={(e) => {
-                          const [h, m] = e.target.value.split(":").map(Number);
-                          const d = new Date(selectedDate ?? new Date());
-                          d.setHours(h, m);
-                          setSelectedDate(d.toISOString());
-                        }}
-                      />
+                      </select>
+                      <p className="text-xs text-gray-500">
+                        Select start time (15-minute intervals)
+                      </p>
                     </div>
                   </div>
-                )}
-
-
-                {/* 🩵 Patient Note (always visible if exists) */}
-                {editingEvent?.patient_note || editingEvent?.extendedProps?.patient_note ? (
-                  <div className="space-y-1">
-                    <Label>Patient Note</Label>
-                    <div className="p-3 border rounded-md bg-gray-50 text-sm text-gray-700 whitespace-pre-wrap">
-                      {editingEvent.patient_note || editingEvent.extendedProps.patient_note}
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-            </TabsContent>
-
-
-            {/* Time Off Form */}
-            <TabsContent value="timeoff" className="min-h-[280px]">
-              <div className="space-y-3">
-                <div>
-                  <Label>Time Off Type</Label>
-                  <Select
-                    value={timeOffMode}
-                    onValueChange={(val) => setTimeOffMode(val as any)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="hours">Partial Day (hours)</SelectItem>
-                      <SelectItem value="day">Full Day</SelectItem>
-                      <SelectItem value="range">Date Range</SelectItem>
-                    </SelectContent>
-                  </Select>
                 </div>
+              )}
+            </div>
+          </div>
 
-                {timeOffMode === "hours" && (
-                  <div className="flex gap-4">
-                    <div className="flex-1 space-y-1">
-                      <Label>Start</Label>
-                      <Input
-                        type="datetime-local"
-                        value={selectedDate?.slice(0, 16) ?? ""}
-                        onChange={(e) =>
-                          setSelectedDate(
-                            new Date(e.target.value).toISOString()
-                          )
-                        }
-                      />
-                    </div>
-                    <div className="flex-1 space-y-1">
-                      <Label>End</Label>
-                      <Input
-                        type="datetime-local"
-                        onChange={(e) => {
-                          const start = new Date(
-                            selectedDate ?? new Date()
-                          );
-                          const end = new Date(e.target.value);
-                          setDuration(
-                            Math.round((end.getTime() - start.getTime()) / 60000)
-                          );
-                        }}
-                      />
-                    </div>
-                  </div>
-                )}
+          {/* ===== Fixed Footer ===== */}
+          <div className="shrink-0 border-t border-gray-200 px-6 py-4 bg-white">
+            <div className="flex justify-between items-center">
+              {/* Left: Cancel/Delete */}
+              {editingEvent && !isTimeOff && (
+                <Button
+                  variant="destructive"
+                  onClick={() =>
+                    showConfirm(
+                      "Are you sure you want to cancel this appointment?",
+                      handleDelete
+                    )
+                  }
+                  className="bg-red-600 text-white hover:bg-red-700"
+                >
+                  Cancel Appointment
+                </Button>
+              )}
+              {editingEvent && isTimeOff && (
+                <Button
+                  variant="destructive"
+                  onClick={() =>
+                    showConfirm(
+                      "Are you sure you want to delete this time off?",
+                      handleDelete
+                    )
+                  }
+                  className="bg-red-600 text-white hover:bg-red-700"
+                >
+                  Delete Time Off
+                </Button>
+              )}
 
-                {timeOffMode === "day" && (
-                  <div className="space-y-1">
-                    <Label>Date</Label>
-                    <Input
-                      type="date"
-                      value={
-                        selectedDate
-                          ? new Date(selectedDate).toISOString().split("T")[0]
-                          : ""
-                      }
-                      readOnly
-                      className="bg-gray-100 cursor-not-allowed"
-                    />
-                  </div>
-                )}
-
-                {timeOffMode === "range" && (
-                  <div className="flex gap-4">
-                    <div className="flex-1 space-y-1">
-                      <Label>Start Date</Label>
-                      <Input
-                        type="date"
-                        onChange={(e) =>
-                          setSelectedDate(
-                            new Date(e.target.value).toISOString()
-                          )
-                        }
-                      />
-                    </div>
-                    <div className="flex-1 space-y-1">
-                      <Label>End Date</Label>
-                      <Input
-                        type="date"
-                        onChange={(e) => {
-                          const d = new Date(e.target.value);
-                          const start = new Date(selectedDate ?? d);
-                          const minutes =
-                            Math.round((d.getTime() - start.getTime()) / 60000) +
-                            1440;
-                          setDuration(minutes);
-                        }}
-                      />
-                    </div>
-                  </div>
-                )}
+              {/* Right: Close/Save */}
+              <div className="flex justify-end gap-2 ml-auto">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    if (isDirty) setShowDiscardDialog(true);
+                    else {
+                      resetForm();
+                      setIsDirty(false);
+                    }
+                  }}
+                >
+                  Close
+                </Button>
+                <Button onClick={handleSave} disabled={saving}>
+                  {saving ? "Saving..." : "Save Changes"}
+                </Button>
               </div>
-            </TabsContent>
-          </Tabs>
-
-          <div className="flex justify-between pt-4">
-            {editingEvent && !isTimeOff && (
-              <Button
-                variant="destructive"
-                onClick={() =>
-                  showConfirm(
-                    "Are you sure you want to cancel this appointment?",
-                    handleDelete
-                  )
-                }
-                className="bg-red-600 text-white hover:bg-red-700"
-              >
-                Cancel Appointment
-              </Button>
-            )}
-            {editingEvent && isTimeOff && (
-              <Button
-                variant="destructive"
-                onClick={() =>
-                  showConfirm(
-                    "Are you sure you want to delete this time off?",
-                    handleDelete
-                  )
-                }
-                className="bg-red-600 text-white hover:bg-red-700"
-              >
-                Delete Time Off
-              </Button>
-            )}
-
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={resetForm}>
-                Close
-              </Button>
-              <Button onClick={handleSave} disabled={saving}>
-                {saving ? "Saving..." : "Save Changes"}
-              </Button>
             </div>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* Confirmation Modal */}
+      {/* ===== Confirmation Modal ===== */}
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <DialogContent>
+        <DialogContent onOpenAutoFocus={(e) => e.preventDefault()}>
           <DialogHeader>
             <DialogTitle>Confirm Action</DialogTitle>
             <DialogDescription>{confirmMessage}</DialogDescription>
@@ -957,6 +1025,34 @@ export default function CalendarTab({ providerId }: { providerId: string }) {
           </div>
         </DialogContent>
       </Dialog>
-    </div>
+      {/* 🧩 Discard Changes Dialog */}
+      <Dialog open={showDiscardDialog} onOpenChange={setShowDiscardDialog}>
+        <DialogContent className="max-w-sm" data-centered>
+          <DialogHeader>
+            <DialogTitle>Discard unsaved changes?</DialogTitle>
+            <DialogDescription>
+              You’ve made changes to this appointment that haven’t been saved.  
+              If you close now, your edits will be lost.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2 pt-4">
+            <Button variant="outline" onClick={() => setShowDiscardDialog(false)}>
+              Keep Editing
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                resetForm();
+                setIsDirty(false);
+                setShowDiscardDialog(false);
+              }}
+            >
+              Discard Changes
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+       </div>
+  </div>   
   );
 }

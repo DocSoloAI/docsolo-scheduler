@@ -26,7 +26,7 @@ export default function ProviderSettingsPage() {
 
   const navigate = useNavigate();
 
-  // Fetch logged-in provider
+  // 🧠 Fetch logged-in provider info
   useEffect(() => {
     const getProvider = async () => {
       const {
@@ -37,7 +37,6 @@ export default function ProviderSettingsPage() {
         setProviderId(user.id);
         setProviderEmail(user.email ?? null);
 
-        // Fetch office_name from providers table
         const { data: providerRow, error } = await supabase
           .from("providers")
           .select("office_name")
@@ -55,7 +54,7 @@ export default function ProviderSettingsPage() {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    navigate("/"); // 👈 back to landing
+    navigate("/"); // 👈 Back to landing page
   };
 
   if (!providerId) {
@@ -67,7 +66,8 @@ export default function ProviderSettingsPage() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto py-10 px-4">
+    // ✅ Keeps scrollbar space constant to stop header/calendar jump
+    <div className="max-w-6xl mx-auto py-10 px-4 overflow-y-scroll">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold text-gray-800">
           {officeName || "Provider Dashboard"}
@@ -83,7 +83,8 @@ export default function ProviderSettingsPage() {
       </div>
 
       <Card>
-        <CardContent className="p-6 min-h-[600px]">
+        {/* ✅ overflow-x-hidden prevents micro width reflows when modals open */}
+        <CardContent className="p-6 min-h-[600px] overflow-x-hidden">
           <SettingsProvider providerId={providerId}>
             <Tabs
               value={activeTab}
@@ -105,7 +106,7 @@ export default function ProviderSettingsPage() {
             >
               <TabsList className="grid grid-cols-5 gap-2 mb-6">
                 <TabsTrigger value="calendar">Calendar</TabsTrigger>
-                <TabsTrigger value="patients">Patients</TabsTrigger> {/* NEW */}
+                <TabsTrigger value="patients">Patients</TabsTrigger>
                 <TabsTrigger value="hours">Hours</TabsTrigger>
                 <TabsTrigger value="services">Services</TabsTrigger>
                 <TabsTrigger value="emails">Emails</TabsTrigger>
@@ -116,11 +117,14 @@ export default function ProviderSettingsPage() {
               </TabsContent>
 
               <TabsContent value="patients">
-                <PatientsTab providerId={providerId} /> {/* NEW */}
+                <PatientsTab providerId={providerId} />
               </TabsContent>
 
               <TabsContent value="hours">
-                <HoursTab providerId={providerId} onDirtyChange={setHoursDirty} />
+                <HoursTab
+                  providerId={providerId}
+                  onDirtyChange={setHoursDirty}
+                />
               </TabsContent>
 
               <TabsContent value="services">
@@ -133,7 +137,6 @@ export default function ProviderSettingsPage() {
               <TabsContent value="emails">
                 <EmailsTab providerId={providerId} />
               </TabsContent>
-
             </Tabs>
           </SettingsProvider>
         </CardContent>

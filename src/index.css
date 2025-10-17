@@ -12,8 +12,6 @@
   }
 }
 
-
-
 @layer base {
   :root {
     --background: 0 0% 100%;
@@ -42,6 +40,7 @@
     --chart-5: 27 87% 67%;
     --radius: 0.5rem;
   }
+
   .dark {
     --background: 222.2 84% 4.9%;
     --foreground: 210 40% 98%;
@@ -70,8 +69,6 @@
   }
 }
 
-
-
 @layer base {
   * {
     @apply border-border;
@@ -81,8 +78,9 @@
   }
 }
 
+/* === Scrollbar behavior === */
 html {
-  scrollbar-gutter: stable;
+  scrollbar-gutter: stable both-edges;
 }
 
 /* === Calendar selected day (React Day Picker v8) === */
@@ -97,4 +95,28 @@ html {
 
 .rdp-day_selected:hover {
   background-color: #1d4ed8 !important; /* Tailwind blue-700 */
+}
+
+/* === Elegant Scrollbar (iOS-style) === */
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 0;
+}
+*::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.15);
+  border-radius: 4px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* === Radix Dialog + FullCalendar stable layout === */
+html, body {
+  overflow-y: scroll; /* Keeps scrollbar space constant */
+}
+
+body[data-radix-scroll-lock] {
+  position: relative;
+  overflow-y: scroll !important; /* Force visible scrollbar even when locked */
+  padding-right: 0 !important;
 }
