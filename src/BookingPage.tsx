@@ -287,6 +287,20 @@ export default function BookingPage() {
     }
   }, [patientType]);
 
+  // ✅ Auto-select the only available service for this patient type
+  useEffect(() => {
+    if (!patientType) return;
+    const filtered = services.filter(
+      (s) => s.default_for === patientType && s.is_active
+    );
+    if (filtered.length === 1) {
+      setSelectedService(filtered[0].id);
+    } else {
+      setSelectedService(null);
+    }
+  }, [patientType, services]);
+
+
   // 👇 Scroll when date chosen → Times list
   useEffect(() => {
     if (selectedDate) {
@@ -398,11 +412,24 @@ export default function BookingPage() {
         return;
       }
 
-      const service = services.find((s) => s.default_for === patientType);
-      if (!service) {
-        setFormError("No matching service available.");
+      // 🧩 Idiot-proof service selection logic
+      const matchingServices = services.filter(
+        (s) => s.default_for === patientType && s.is_active
+      );
+
+      if (matchingServices.length === 0) {
+        setFormError("No services available for this type of appointment.");
         return;
       }
+
+      if (!selectedService && matchingServices.length > 1) {
+        setFormError("Please select a specific service before continuing.");
+        return;
+      }
+
+      const service =
+        services.find((s) => s.id === selectedService) || matchingServices[0];
+
       const serviceId = service.id;
       const normalizedEmail = email.trim().toLowerCase(); // ✅ normalize once here
 
@@ -1146,9 +1173,10 @@ export default function BookingPage() {
                     )}
                     <Button
                       className="w-full mt-4"
-                      onClick={() => setShowConfirmModal(true)} // ✅ open modal instead of confirm
-                      disabled={confirmed}
+                      onClick={() => setShowConfirmModal(true)}
+                      disabled={confirmed || !selectedService}
                     >
+
                       {confirmed
                         ? "Appointment Confirmed"
                         : "Review & Continue"}

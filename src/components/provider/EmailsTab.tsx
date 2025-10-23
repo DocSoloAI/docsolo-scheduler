@@ -7,7 +7,9 @@ import { Switch } from "@/components/ui/switch";
 
 interface EmailsTabProps {
   providerId: string;
+  onDirtyChange?: (dirty: boolean) => void;
 }
+
 
 interface ProviderInfo {
   id: string;
@@ -18,9 +20,16 @@ interface ProviderInfo {
   send_reminders: boolean;
 }
 
-export default function EmailsTab({ providerId }: EmailsTabProps) {
+export default function EmailsTab({ providerId, onDirtyChange }: EmailsTabProps) {
   const [provider, setProvider] = useState<ProviderInfo | null>(null);
   const [saving, setSaving] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  const markDirty = () => {
+    if (!dirty) {
+      setDirty(true);
+      onDirtyChange?.(true);
+    }
+  };
 
   useEffect(() => {
     const loadProvider = async () => {
@@ -61,7 +70,9 @@ export default function EmailsTab({ providerId }: EmailsTabProps) {
       })
       .eq("id", provider.id);
 
-    setSaving(false);
+    setDirty(false);
+    onDirtyChange?.(false);
+
 
     if (error) {
       alert("❌ Error saving settings: " + error.message);
@@ -71,48 +82,72 @@ export default function EmailsTab({ providerId }: EmailsTabProps) {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="border p-4 rounded bg-gray-50 space-y-4">
-        <h3 className="font-semibold">Settings</h3>
-
-        {/* Announcement */}
-        <div>
-          <label className="block text-sm font-medium">
-            Custom Announcement (Emails + Booking Page)
-          </label>
-          <Input
-            value={provider?.announcement || ""}
-            onChange={(e) =>
-              setProvider((p) => (p ? { ...p, announcement: e.target.value } : null))
-            }
-            placeholder="e.g. Refer a friend . . . "
-          />
-          <p className="text-xs text-gray-500">
-            This note will be shown in two places: 
-            <br />• At the top of your booking page (highlighted box) 
-            <br />• At the bottom of all patient emails
+    <div className="max-w-2xl space-y-6">
+      {/* General Settings Card */}
+      <div className="bg-gray-50 border border-gray-200 rounded-lg shadow-sm hover:shadow transition-all duration-200">
+        <div className="p-6 space-y-6">
+          <h3 className="text-lg font-semibold text-gray-800">Email & Page Settings</h3>
+          <p className="text-sm text-gray-500">
+            These settings control your booking page announcement and automated patient reminder emails.
           </p>
-        </div>
 
-        {/* Reminders toggle */}
-        <div className="flex items-center justify-between">
-          <label className="text-sm font-medium">Send 24-hour reminders</label>
-          <Switch
-            checked={provider?.send_reminders ?? true}
-            onCheckedChange={(val: boolean) =>
-              setProvider((p) => (p ? { ...p, send_reminders: val } : null))
-            }
-          />
+          {/* Announcement */}
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-gray-700">
+              Announcement Message
+            </label>
+            <Input
+              value={provider?.announcement || ""}
+              onChange={(e) => {
+                setProvider((p) => (p ? { ...p, announcement: e.target.value } : null));
+                markDirty();
+              }}
+
+              placeholder="e.g. 'Refer a friend and both get $10 off your next visit!'"
+              className="bg-white"
+            />
+            <p className="text-xs text-gray-500 leading-relaxed">
+              Shown at the top of your booking page and at the bottom of all patient emails.
+            </p>
+          </div>
+
+          {/* Reminders Toggle */}
+          <div className="flex items-center justify-between border-t border-gray-200 pt-4">
+            <div>
+              <p className="text-sm font-medium text-gray-800">
+                Send 24-hour email reminders
+              </p>
+              <p className="text-xs text-gray-500 mt-0.5">
+                When enabled, patients automatically get a reminder email 24 hours before their appointment.
+              </p>
+            </div>
+            <Switch
+              checked={provider?.send_reminders ?? true}
+              onCheckedChange={(val: boolean) => {
+                setProvider((p) => (p ? { ...p, send_reminders: val } : null));
+                markDirty();
+              }}
+
+            />
+          </div>
         </div>
-        <p className="text-xs text-gray-500">
-          If enabled, patients will automatically receive a reminder email 24 hours before
-          their appointment.
-        </p>
       </div>
 
-      <Button onClick={saveSettings} disabled={saving}>
-        {saving ? "Saving…" : "Save Settings"}
-      </Button>
+      {/* Save Button */}
+      <div className="pt-2">
+        <Button
+          onClick={saveSettings}
+          disabled={!dirty || saving}
+          className={`font-medium px-6 py-2 rounded-md shadow-sm transition-all ${
+            !dirty || saving
+              ? "bg-gray-300 text-gray-600 cursor-not-allowed"
+              : "bg-blue-600 hover:bg-blue-700 text-white"
+          }`}
+        >
+          {saving ? "Saving…" : dirty ? "Save Settings" : "All Changes Saved"}
+        </Button>
+      </div>
     </div>
   );
+
 }
