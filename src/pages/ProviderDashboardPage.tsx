@@ -1,4 +1,4 @@
-// src/pages/ProviderSettingsPage.tsx
+// src/pages/ProviderDashboardPage.tsx
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabaseClient";
@@ -26,6 +26,8 @@ export default function ProviderSettingsPage() {
 
   const navigate = useNavigate();
 
+
+  
   // 🧠 Fetch logged-in provider info
   useEffect(() => {
     const getProvider = async () => {
@@ -52,10 +54,47 @@ export default function ProviderSettingsPage() {
     getProvider();
   }, []);
 
+  useEffect(() => {
+    const handleSwitchToCalendar = () => {
+      const targetTab = localStorage.getItem("dashboardActiveTab");
+      if (targetTab === "calendar") {
+        setActiveTab("calendar");
+        localStorage.removeItem("dashboardActiveTab");
+      }
+    };
+
+    // Listen for event from PatientsTab
+    window.addEventListener("switch-to-calendar", handleSwitchToCalendar);
+
+    // Run once on mount (in case user refreshed)
+    handleSwitchToCalendar();
+
+    return () => {
+      window.removeEventListener("switch-to-calendar", handleSwitchToCalendar);
+    };
+  }, []);
+
+  // ✅ Handles navigation confirmation coming from HoursTab modal
+  useEffect(() => {
+    const handleNavigateConfirm = (e: Event) => {
+      const custom = e as CustomEvent;
+      const target = (custom.detail as any)?.target;
+      if (target) setActiveTab(target);
+    };
+
+    // 👇 Cast listener to EventListener to satisfy TypeScript
+    window.addEventListener("docsolo:navigate:confirm", handleNavigateConfirm as EventListener);
+    return () => {
+      window.removeEventListener("docsolo:navigate:confirm", handleNavigateConfirm as EventListener);
+    };
+  }, []);
+
+
   const handleLogout = async () => {
     await supabase.auth.signOut();
     navigate("/"); // 👈 Back to landing page
   };
+
 
   if (!providerId) {
     return (
@@ -89,20 +128,17 @@ export default function ProviderSettingsPage() {
             <Tabs
               value={activeTab}
               onValueChange={(nextTab) => {
-                if (activeTab === "hours" && hoursDirty) {
-                  const confirmLeave = window.confirm(
-                    "You have unsaved changes in Hours. Do you want to leave without saving?"
+                // 🧠 Prevent navigation if unsaved changes exist in Hours or Services
+                if ((activeTab === "hours" && hoursDirty) || (activeTab === "services" && servicesDirty)) {
+                  window.dispatchEvent(
+                    new CustomEvent("docsolo:navigate", { detail: { target: nextTab } })
                   );
-                  if (!confirmLeave) return;
+                  return; // stop tab switch
                 }
-                if (activeTab === "services" && servicesDirty) {
-                  const confirmLeave = window.confirm(
-                    "You have unsaved changes in Services. Do you want to leave without saving?"
-                  );
-                  if (!confirmLeave) return;
-                }
+
                 setActiveTab(nextTab);
               }}
+
             >
               <TabsList className="grid grid-cols-5 gap-2 mb-6">
                 <TabsTrigger value="calendar">Calendar</TabsTrigger>

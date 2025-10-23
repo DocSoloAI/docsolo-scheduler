@@ -9,7 +9,10 @@ module.exports = {
     {
       pattern: /^rdp-/,
     },
+    'day-pulse',
+    'pulse-highlight',
   ],
+
   theme: {
     extend: {
       borderRadius: {

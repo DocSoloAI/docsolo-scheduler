@@ -120,6 +120,7 @@ export default function BookingPage() {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>();
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
   const [confirmed, setConfirmed] = useState(false);
+  const [selectedService, setSelectedService] = useState<string | null>(null);
 
   // Shared fields
   const [firstName, setFirstName] = useState("");
@@ -557,82 +558,140 @@ export default function BookingPage() {
               </div>
             )}
 
-            {/* WHO’S BOOKING TODAY */}
+            {/* WHO’S BOOKING TODAY (multi-service upgrade) */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.4 }}
               className="mb-10"
             >
-              <h2 className="text-2xl font-semibold mb-6 text-gray-800">
+              <h2 className="text-2xl font-semibold mb-6 text-gray-800 text-center">
                 Who’s booking today?
               </h2>
 
-              <div className="grid md:grid-cols-2 gap-6">
-                <Card
-                  className={`cursor-pointer transition hover:shadow-lg ${
-                    patientType === "established"
-                      ? "border-blue-600 bg-blue-50 ring-2 ring-blue-400"
-                      : ""
-                  }`}
-                  onClick={() => setPatientType("established")}
-                >
-                  <CardHeader>
-                    <CardTitle
-                      className={patientType === "established" ? "text-blue-700 font-bold" : ""}
-                    >
-                      {services.find((s) => s.default_for === "established")?.name || "Returning Patient"}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <p
-                      className={`text-sm ${
+              {/* Step 1: Choose patient type */}
+              {!patientType && (
+                <div className="flex flex-col items-center gap-6">
+                  <div className="flex flex-wrap justify-center gap-4">
+                    <Button
+                      onClick={() => setPatientType("established")}
+                      className={`px-6 py-3 rounded-lg font-medium shadow-sm transition-all duration-150 ${
                         patientType === "established"
-                          ? "text-blue-600 font-medium"
-                          : "text-gray-500"
+                          ? "bg-blue-700 text-white"
+                          : "bg-white text-gray-800 border border-gray-300 hover:bg-gray-50"
                       }`}
                     >
-                      {services.find((s) => s.default_for === "established")?.description ||
-                        "Book a follow-up Chiropractic Treatment."}
-                    </p>
-                  </CardContent>
-                </Card>
+                      I’m a Returning Patient
+                    </Button>
 
-                <Card
-                  className={`cursor-pointer transition hover:shadow-lg ${
-                    patientType === "new"
-                      ? "border-blue-600 bg-blue-50 ring-2 ring-blue-400"
-                      : ""
-                  }`}
-                  onClick={() => setPatientType("new")}
-                >
-                  <CardHeader>
-                    <CardTitle
-                      className={patientType === "new" ? "text-blue-700 font-bold" : ""}
-                    >
-                      {services.find((s) => s.default_for === "new")?.name || "New Patient"}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <p
-                      className={`text-sm ${
+                    <Button
+                      onClick={() => setPatientType("new")}
+                      className={`px-6 py-3 rounded-lg font-medium shadow-sm transition-all duration-150 ${
                         patientType === "new"
-                          ? "text-blue-600 font-medium"
-                          : "text-gray-500"
+                          ? "bg-blue-700 text-white"
+                          : "bg-white text-gray-800 border border-gray-300 hover:bg-gray-50"
                       }`}
                     >
-                      {services.find((s) => s.default_for === "new")?.description ||
-                        "Book your first New Patient Evaluation."}
-                    </p>
-                  </CardContent>
-                </Card>
+                      I’m a New Patient
+                    </Button>
+                  </div>
+                </div>
+              )}
 
-              </div>
+              {/* Step 2: Show available services for that type */}
+              {patientType && (
+                <div className="mt-8 space-y-6">
+                  <div className="text-center">
+                    <button
+                      onClick={() => setPatientType(null)}
+                      className="text-sm text-gray-500 hover:text-gray-700 mb-2"
+                    >
+                      ← Change patient type
+                    </button>
+                    <h3 className="text-xl font-semibold text-gray-800">
+                      Select a {patientType === "new" ? "New Patient" : "Returning Patient"} Service
+                    </h3>
+                    <p className="text-sm text-gray-500 mt-1">
+                      Choose your visit type below
+                    </p>
+                  </div>
+
+                  <div className="grid md:grid-cols-2 gap-6">
+                    {services
+                      .filter(
+                        (s) =>
+                          s.default_for === patientType &&
+                          (s.is_active ?? true)
+                      )
+                      .map((svc) => (
+                        <Card
+                          key={svc.id}
+                          className={`cursor-pointer transition border hover:shadow-md ${
+                            // highlight when selected
+                            selectedService === svc.id
+                              ? "border-blue-600 bg-blue-50 ring-2 ring-blue-300"
+                              : "border-gray-200 bg-white"
+                          }`}
+                          onClick={() => {
+                            // ✅ new behavior: remember chosen service + proceed
+                            setSelectedService(svc.id);
+                            setTimeout(() => {
+                              const scrollTarget = document.getElementById("datetime-section");
+                              scrollTarget?.scrollIntoView({ behavior: "smooth" });
+                            }, 200);
+                          }}
+                        >
+                          <CardHeader className="flex flex-row items-center justify-between p-4 pb-0">
+                            <CardTitle
+                              className={`text-lg font-semibold ${
+                                selectedService === svc.id
+                                  ? "text-blue-700"
+                                  : "text-gray-800"
+                              }`}
+                            >
+                              {svc.name}
+                            </CardTitle>
+                            {svc.color && (
+                              <div
+                                className="w-5 h-5 rounded-full border border-gray-300"
+                                style={{ backgroundColor: svc.color }}
+                              />
+                            )}
+                          </CardHeader>
+
+                          <CardContent className="p-4 pt-2">
+                            {svc.description && (
+                              <p className="text-sm text-gray-600 mb-2">
+                                {svc.description}
+                              </p>
+                            )}
+                            <p className="text-sm text-gray-500">
+                              {svc.duration_minutes
+                                ? `${svc.duration_minutes} minutes`
+                                : "Duration TBD"}
+                            </p>
+                          </CardContent>
+                        </Card>
+                      ))}
+
+                    {/* If no matching services */}
+                    {services.filter(
+                      (s) =>
+                        s.default_for === patientType && (s.is_active ?? true)
+                    ).length === 0 && (
+                      <div className="col-span-2 text-center text-gray-500 p-6 bg-gray-50 rounded-md border border-gray-200">
+                        No services available for this category.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </motion.div>
 
             {/* DATE & TIME */}
             {patientType && (
               <motion.div
+                id="datetime-section"
                 key="datetime"
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}

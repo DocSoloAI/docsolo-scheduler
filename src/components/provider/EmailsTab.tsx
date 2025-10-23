@@ -85,7 +85,7 @@ export default function EmailsTab({ providerId }: EmailsTabProps) {
             onChange={(e) =>
               setProvider((p) => (p ? { ...p, announcement: e.target.value } : null))
             }
-            placeholder="e.g. The office will be closed Oct 1–8, 2025"
+            placeholder="e.g. Refer a friend . . . "
           />
           <p className="text-xs text-gray-500">
             This note will be shown in two places: 

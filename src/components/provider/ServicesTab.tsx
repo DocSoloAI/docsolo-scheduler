@@ -1,7 +1,14 @@
-// src/components/provider/ServicesTab.tsx
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useSettings } from "@/context/SettingsContext";
+import { Plus, Save } from "lucide-react";
+import {
+  Card,
+  CardHeader,
+  // CardTitle,
+  CardContent,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 
 interface Service {
   id?: string;
@@ -12,7 +19,7 @@ interface Service {
   is_active: boolean;
   isCustom?: boolean;
   default_for?: "new" | "established" | null;
-  color?: string; // ✅ new
+  color?: string;
 }
 
 const presetDurations = [15, 20, 30, 45, 60];
@@ -25,18 +32,19 @@ interface ServicesTabProps {
 export default function ServicesTab({ providerId, onDirtyChange }: ServicesTabProps) {
   const { services: ctxServices, reload, loading } = useSettings();
   const [services, setServices] = useState<Service[]>([]);
+  const [dirty, setDirty] = useState(false);
 
-  // Load services from context or initialize defaults
+  // 🔄 Load from context
   useEffect(() => {
     if (ctxServices && ctxServices.length > 0) {
       setServices(
         ctxServices.map((s: any) => ({
           ...s,
           isCustom: !presetDurations.includes(s.duration_minutes),
+          color: s.color || "#3b82f6",
         }))
       );
     } else if (providerId) {
-      // ✅ Default starter services
       setServices([
         {
           provider_id: providerId,
@@ -44,8 +52,8 @@ export default function ServicesTab({ providerId, onDirtyChange }: ServicesTabPr
           description: "Book a follow-up Chiropractic Treatment.",
           duration_minutes: 30,
           is_active: true,
-          isCustom: false,
           default_for: "established",
+          color: "#3b82f6",
         },
         {
           provider_id: providerId,
@@ -53,12 +61,17 @@ export default function ServicesTab({ providerId, onDirtyChange }: ServicesTabPr
           description: "Book your first New Patient Evaluation.",
           duration_minutes: 60,
           is_active: true,
-          isCustom: false,
           default_for: "new",
+          color: "#16a34a",
         },
       ]);
     }
   }, [ctxServices, providerId]);
+
+  const markDirty = () => {
+    setDirty(true);
+    onDirtyChange?.(true);
+  };
 
   const updateService = <K extends keyof Service>(
     idx: number,
@@ -66,24 +79,14 @@ export default function ServicesTab({ providerId, onDirtyChange }: ServicesTabPr
     value: Service[K]
   ) => {
     let updated = [...services];
-
-    // Ensure only one default per type
     if (field === "default_for" && value) {
       updated = updated.map((s, i) =>
         i !== idx && s.default_for === value ? { ...s, default_for: null } : s
       );
     }
-
     updated[idx] = { ...updated[idx], [field]: value };
     setServices(updated);
-    onDirtyChange?.(true);
-  };
-
-  const deleteService = (idx: number) => {
-    const newServices = [...services];
-    newServices.splice(idx, 1);
-    setServices(newServices);
-    onDirtyChange?.(true);
+    markDirty();
   };
 
   const addService = () => {
@@ -95,15 +98,14 @@ export default function ServicesTab({ providerId, onDirtyChange }: ServicesTabPr
         description: "",
         duration_minutes: 30,
         is_active: true,
-        isCustom: false,
         default_for: null,
+        color: "#3b82f6",
       },
     ]);
-    onDirtyChange?.(true);
+    markDirty();
   };
 
   const saveServices = async () => {
-    // 1. Get existing rows from DB
     const { data: existing } = await supabase
       .from("services")
       .select("id")
@@ -113,181 +115,196 @@ export default function ServicesTab({ providerId, onDirtyChange }: ServicesTabPr
     const currentIds = new Set(services.filter((s) => s.id).map((s) => s.id));
     const idsToDelete = [...existingIds].filter((id) => !currentIds.has(id));
 
-    // 2. Upsert current services
     const prepared = services.map((s) => ({
       id: s.id ?? crypto.randomUUID(),
       provider_id: s.provider_id,
-      name: s.name,
-      description: s.description || null,
+      name: s.name.trim(),
+      description: s.description?.trim() || null,
       duration_minutes: s.duration_minutes,
       is_active: s.is_active,
       default_for: s.default_for ?? null,
-      color: s.color || null, // ✅ new
+      color: s.color || "#3b82f6",
     }));
 
-
-    const { error: upsertError } = await supabase
-      .from("services")
-      .upsert(prepared);
-
+    const { error: upsertError } = await supabase.from("services").upsert(prepared);
     if (upsertError) {
       alert("Error saving services: " + upsertError.message);
       return;
     }
 
-    // 3. Delete removed
     if (idsToDelete.length > 0) {
       await supabase.from("services").delete().in("id", idsToDelete);
     }
 
-    alert("Services saved ✅");
+    setDirty(false);
     onDirtyChange?.(false);
-
-    // ✅ Refresh context → stays canonical
     reload();
+    alert("✅ Services saved successfully.");
   };
 
   if (loading) {
-    return <div className="p-4 text-gray-500">Loading services…</div>;
+    return <div className="p-6 text-gray-500">Loading services…</div>;
   }
 
   return (
-    <div className="space-y-6">
-      {services.map((service, idx) => (
-        <div
-          key={service.id || idx}
-          className="border-b pb-4 mb-6 px-2 pt-4 rounded bg-gray-50 shadow-sm"
-        >
-          {/* Service Name */}
-          <div className="mb-2">
-            <label className="block text-sm font-semibold mb-1">Service Name</label>
-            <input
-              type="text"
-              value={service.name}
-              onChange={(e) => updateService(idx, "name", e.target.value)}
-              className="border p-2 rounded w-full"
-            />
-          </div>
-
-          {/* Service Description */}
-          <div className="mb-2">
-            <label className="block text-sm font-semibold mb-1">Description</label>
-            <textarea
-              value={service.description || ""}
-              onChange={(e) => updateService(idx, "description", e.target.value)}
-              className="border p-2 rounded w-full text-sm"
-              rows={2}
-              placeholder="Short description (shown to patients)"
-            />
-          </div>
-
-          {/* Duration & Active Toggle */}
-          <div className="flex items-center gap-4 mb-4">
-            <div>
-              <label className="block text-sm font-semibold mb-1">Duration</label>
-              <select
-                value={service.isCustom ? "custom" : String(service.duration_minutes)}
-                onChange={(e) => {
-                  if (e.target.value === "custom") {
-                    updateService(idx, "isCustom", true);
-                  } else {
-                    updateService(idx, "isCustom", false);
-                    updateService(idx, "duration_minutes", Number(e.target.value));
-                  }
-                }}
-                className="border p-2 rounded w-32"
-              >
-                {presetDurations.map((d) => (
-                  <option key={d} value={d}>{d} min</option>
-                ))}
-                <option value="custom">Custom…</option>
-              </select>
-            </div>
-
-            {service.isCustom && (
-              <div>
-                <label className="block text-sm font-semibold mb-1">Custom Duration</label>
-                <input
-                  type="number"
-                  min={1}
-                  max={480}
-                  value={service.duration_minutes}
-                  onChange={(e) => updateService(idx, "duration_minutes", Number(e.target.value))}
-                  className="border p-2 rounded w-28"
-                />
-              </div>
-            )}
-
-            <div className="flex items-center mt-6">
-              <input
-                type="checkbox"
-                checked={!!service.is_active}
-                onChange={(e) => updateService(idx, "is_active", e.target.checked)}
-                className="mr-2"
-              />
-              <span className="text-sm">Active</span>
-            </div>
-          </div>
-
-          {/* Default For */}
-          <div className="mb-4">
-            <label className="block text-sm font-semibold mb-1">
-              Use this service for…
-              <span className="text-xs text-gray-500 ml-2">(auto-selected by patient type)</span>
-            </label>
-            <select
-              value={service.default_for || ""}
-              onChange={(e) =>
-                updateService(
-                  idx,
-                  "default_for",
-                  e.target.value === "new" || e.target.value === "established"
-                    ? e.target.value
-                    : null
-                )
-              }
-              className="border p-2 rounded w-64"
-            >
-              <option value="">— Not a default —</option>
-              <option value="established">Established Patient</option>
-              <option value="new">New Patient</option>
-            </select>
-          </div>
-          
-          {/* Service Color */}
-          <div className="mb-4">
-            <label className="block text-sm font-semibold mb-1">Color</label>
-            <input
-              type="color"
-              value={service.color || "#3b82f6"}
-              onChange={(e) => updateService(idx, "color", e.target.value)}
-              className="w-12 h-8 border rounded"
-            />
-          </div>
-
-          {/* Delete Button */}
-          <button
-            className="bg-red-500 text-white px-3 py-1 text-sm rounded"
-            onClick={() => deleteService(idx)}
+    <div className="relative pb-32 space-y-6 max-w-3xl mx-auto">
+      <div className="space-y-4">
+        {services.map((service, idx) => (
+          <Card
+            key={service.id || idx}
+            className="bg-gray-50 border-gray-200 hover:shadow-sm transition rounded-xl"
           >
-            Delete Service
-          </button>
-        </div>
-      ))}
+            <CardHeader className="flex flex-col gap-2 p-4 pb-0">
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                {/* 🎨 Color + Service Name */}
+                <div className="flex items-center gap-3">
+                  <input
+                    type="color"
+                    value={service.color || "#3b82f6"}
+                    onChange={(e) => updateService(idx, "color", e.target.value)}
+                    className="w-7 h-7 rounded-md border border-gray-300 shadow-sm cursor-pointer hover:scale-[1.05] transition-transform"
+                  />
+                  <input
+                    type="text"
+                    value={service.name}
+                    onChange={(e) => updateService(idx, "name", e.target.value)}
+                    className="text-lg font-semibold text-gray-800 bg-transparent border-b border-transparent focus:border-blue-400 outline-none w-56 md:w-72"
+                    placeholder="Service name"
+                  />
+                </div>
 
-      <div className="flex gap-2">
-        <button
-          onClick={addService}
-          className="bg-blue-500 text-white px-3 py-1 rounded"
-        >
-          + Add Service
-        </button>
-        <button
+                {/* 🗑 Delete button */}
+                <button
+                  onClick={() => {
+                    if (confirm(`Delete service "${service.name}"?`)) {
+                      const updated = services.filter((_, i) => i !== idx);
+                      setServices(updated);
+                      markDirty();
+                    }
+                  }}
+                  className="
+                    text-sm font-medium text-red-600 
+                    bg-red-50 hover:bg-red-100 
+                    border border-red-200 hover:border-red-300
+                    rounded-md px-3 py-1.5 
+                    transition-all duration-150
+                    focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-1
+                  "
+                >
+                  Delete
+                </button>
+              </div>
+            </CardHeader>
+
+
+            <CardContent className="p-4 space-y-4">
+              {/* Line 2: Description */}
+              <textarea
+                value={service.description || ""}
+                onChange={(e) => updateService(idx, "description", e.target.value)}
+                className="w-full border border-gray-200 rounded-md p-2 text-sm resize-none focus:ring-1 focus:ring-blue-400"
+                rows={2}
+                placeholder="Short description (what patients will see when booking)"
+              />
+
+              {/* Line 3: Duration + Auto-select */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Duration */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Duration
+                  </label>
+                  <select
+                    value={service.isCustom ? "custom" : String(service.duration_minutes)}
+                    onChange={(e) => {
+                      if (e.target.value === "custom") {
+                        updateService(idx, "isCustom", true);
+                      } else {
+                        updateService(idx, "isCustom", false);
+                        updateService(idx, "duration_minutes", Number(e.target.value));
+                      }
+                    }}
+                    className="w-full border-gray-300 rounded-md p-2 text-sm"
+                  >
+                    {presetDurations.map((d) => (
+                      <option key={d} value={d}>
+                        {d} min
+                      </option>
+                    ))}
+                    <option value="custom">Custom…</option>
+                  </select>
+                  {service.isCustom && (
+                    <input
+                      type="number"
+                      min={1}
+                      max={480}
+                      value={service.duration_minutes}
+                      onChange={(e) =>
+                        updateService(idx, "duration_minutes", Number(e.target.value))
+                      }
+                      className="mt-2 w-full border-gray-300 rounded-md p-2 text-sm"
+                      placeholder="Enter minutes"
+                    />
+                  )}
+                </div>
+
+                {/* Auto-select */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Automatically use for
+                  </label>
+                  <select
+                    value={service.default_for || ""}
+                    onChange={(e) =>
+                      updateService(
+                        idx,
+                        "default_for",
+                        e.target.value === "new" || e.target.value === "established"
+                          ? e.target.value
+                          : null
+                      )
+                    }
+                    className="w-full border-gray-300 rounded-md p-2 text-sm"
+                  >
+                    <option value="">— No automatic selection —</option>
+                    <option value="established">Returning Patients</option>
+                    <option value="new">New Patients</option>
+                  </select>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+
+        {services.length === 0 && (
+          <div className="text-center text-gray-500 py-10">
+            No services yet.
+            <div>
+              <Button onClick={addService} className="mt-3">
+                <Plus size={16} className="mr-1" /> Add Service
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Sticky Save Bar */}
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg py-3 px-4 flex justify-between items-center z-10">
+        <Button onClick={addService} className="flex items-center gap-1">
+          <Plus size={16} /> Add Service
+        </Button>
+
+        <Button
           onClick={saveServices}
-          className="bg-green-600 text-white px-4 py-2 rounded"
+          disabled={!dirty}
+          className={
+            dirty
+              ? "bg-green-600 hover:bg-green-700 text-white flex items-center gap-2"
+              : "bg-gray-200 text-gray-500 cursor-not-allowed flex items-center gap-2"
+          }
         >
-          Save All Services
-        </button>
+          <Save size={16} /> {dirty ? "Save Changes" : "Saved"}
+        </Button>
       </div>
     </div>
   );

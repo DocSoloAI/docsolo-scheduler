@@ -32,7 +32,7 @@ export function SettingsProvider({
   const [svcRes, availRes, patRes, apptRes] = await Promise.all([
     supabase
       .from("services")
-      .select("id, provider_id, name, description, duration_minutes, is_active, default_for")
+      .select("id, provider_id, name, description, duration_minutes, is_active, default_for, color")
       .eq("provider_id", providerId),
 
     supabase
