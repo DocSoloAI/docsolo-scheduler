@@ -631,7 +631,7 @@ export default function BookingPage() {
                   <div className="text-center">
                     <button
                       onClick={() => setPatientType(null)}
-                      className="text-sm text-gray-500 hover:text-blue-600 hover:underline underline-offset-2 transition-all mb-3 -mt-1 block"
+                      className="text-sm text-gray-500 hover:text-blue-600 hover:underline underline-offset-2 transition-all mb-2 -mt-1"
                     >
                       {patientType === "new"
                         ? "← I’m a returning patient instead"
