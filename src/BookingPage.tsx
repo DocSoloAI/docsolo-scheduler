@@ -638,9 +638,6 @@ export default function BookingPage() {
                     <h3 className="text-xl font-semibold text-gray-800">
                       Select a {patientType === "new" ? "New Patient" : "Returning Patient"} Service
                     </h3>
-                    <p className="text-sm text-gray-500 mt-1">
-                      Choose your visit type below
-                    </p>
                   </div>
 
                   <div className="grid md:grid-cols-2 gap-6">
