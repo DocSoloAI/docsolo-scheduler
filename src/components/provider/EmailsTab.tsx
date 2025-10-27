@@ -4,6 +4,7 @@ import { supabase } from "@/lib/supabaseClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { toast } from "react-hot-toast";
 
 interface EmailsTabProps {
   providerId: string;
@@ -75,9 +76,9 @@ export default function EmailsTab({ providerId, onDirtyChange }: EmailsTabProps)
 
 
     if (error) {
-      alert("❌ Error saving settings: " + error.message);
+      toast.error(`Error saving settings: ${error.message}`);
     } else {
-      alert("✅ Email settings saved");
+      toast.success("Email settings saved successfully ✅");
     }
   };
 

@@ -10,6 +10,7 @@ import { getSubdomain } from "./lib/getSubdomain";
 import { SettingsProvider } from "./context/SettingsContext";
 import { supabase } from "./lib/supabaseClient";
 import { useEffect, useState } from "react";
+import { Toaster } from "sonner";
 
 function BookingWithProvider({ children }: { children: React.ReactNode }) {
   const subdomain = getSubdomain();
@@ -85,43 +86,45 @@ export default function App() {
     );
   }
 
-  // ---------- Provider Domain ----------
   if (
     hostname === providerRoot ||
     hostname === `www.${providerRoot}` ||
     hostname === "localhost"
   ) {
     return (
-      <Routes>
-        <Route path="/" element={<DocSoloLanding />} />
-        <Route
-          path="/dashboard"
-          element={
-            <ProtectedRoute>
-              <ProviderDashboardPage />
-            </ProtectedRoute>
-          }
-        />
-        {/* ✅ Dev-only aliases for testing patient pages locally */}
-        <Route
-          path="/booking"
-          element={
-            <BookingWithProvider>
-              <BookingPage />
-            </BookingWithProvider>
-          }
-        />
-        <Route
-          path="/manage/:appointmentId"
-          element={
-            <BookingWithProvider>
-              <ManageAppointmentPage />
-            </BookingWithProvider>
-          }
-        />
-      </Routes>
+      <>
+        <Routes>
+          <Route path="/" element={<DocSoloLanding />} />
+          <Route
+            path="/dashboard"
+            element={
+              <ProtectedRoute>
+                <ProviderDashboardPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/booking"
+            element={
+              <BookingWithProvider>
+                <BookingPage />
+              </BookingWithProvider>
+            }
+          />
+          <Route
+            path="/manage/:appointmentId"
+            element={
+              <BookingWithProvider>
+                <ManageAppointmentPage />
+              </BookingWithProvider>
+            }
+          />
+        </Routes>
+        <Toaster richColors position="top-right" /> {/* ✅ add this */}
+      </>
     );
   }
+
 
   // ---------- Fallback ----------
   return <div>Not found</div>;

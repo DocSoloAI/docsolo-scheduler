@@ -12,6 +12,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import { toast } from "react-hot-toast";
 
 interface Appointment {
   id: string;
@@ -99,9 +100,10 @@ export default function ManageAppointmentPage() {
       .eq("id", appointment.id);
 
     if (error) {
-      alert("Error cancelling appointment.");
+      toast.error("Error cancelling appointment.");
       return;
     }
+
 
     // Fetch full details for emails
     const { data: appt } = await supabase

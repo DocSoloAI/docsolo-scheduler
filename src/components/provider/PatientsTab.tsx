@@ -12,6 +12,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import { toast } from "react-hot-toast";
 
 interface PatientsTabProps {
   providerId: string;
@@ -137,7 +138,7 @@ export default function PatientsTab({ providerId }: PatientsTabProps) {
   // 💾 Save patient (insert or update)
 const savePatient = async () => {
   if (!form.first_name.trim() || !form.last_name.trim()) {
-    alert("First and last name are required.");
+    toast.error("First and last name are required.");
     return;
   }
 
@@ -205,7 +206,7 @@ const savePatient = async () => {
     });
   } catch (err: any) {
     console.error("❌ Error saving patient:", err.message);
-    alert("Error saving patient: " + err.message);
+    toast.error("Error saving patient: " + err.message);
   } finally {
     setSaving(false);
   }
@@ -218,7 +219,7 @@ const savePatient = async () => {
     const { error } = await supabase.from("patients").delete().eq("id", editing.id);
 
     if (error) {
-      alert("Error deleting patient: " + error.message);
+      toast.error(`Error deleting patient: ${error.message}`);
       return;
     }
 

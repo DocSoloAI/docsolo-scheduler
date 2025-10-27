@@ -36,6 +36,7 @@ import {
   CommandItem,
 } from "@/components/ui/command";
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
+import { toast } from "react-hot-toast";
 
 // === Email helper ===
 async function sendDualEmail(
@@ -485,7 +486,7 @@ const loadEvents = async () => {
 
       setSaving(false);
       if (error) {
-        alert("Error updating: " + error.message);
+        toast.error(`Error updating appointment: ${error.message}`);
         return;
       }
 
@@ -544,15 +545,15 @@ const loadEvents = async () => {
 
       setSaving(false);
       if (repeatErr) {
-        alert("Error saving repeating time off: " + repeatErr.message);
+        toast.error(`Error saving repeating time off: ${repeatErr.message}`);
         return;
       }
 
       await safeReload();
       resetForm();
-      alert(`✅ Added ${repeats.length} repeating time-off blocks`);
+      toast.success(`Added ${repeats.length} repeating time-off blocks ✅`);
       return;
-    }
+      }
 
     // 🧩 3. CREATE single appointment or time off
     if (isTimeOff) {
@@ -570,9 +571,10 @@ const loadEvents = async () => {
 
       setSaving(false);
       if (offErr) {
-        alert("Error saving time off: " + offErr.message);
+        toast.error(`Error saving time off: ${offErr.message}`);
         return;
       }
+
 
       await loadEvents(); // refresh calendar immediately
       resetForm();
@@ -599,9 +601,10 @@ const loadEvents = async () => {
 
       setSaving(false);
       if (error) {
-        alert("Error saving appointment: " + error.message);
+        toast.error(`Error saving appointment: ${error.message}`);
         return;
       }
+
 
       await new Promise((r) => setTimeout(r, 200));
       await loadEvents(); // second reload after context rehydrates
@@ -770,12 +773,9 @@ if (isTimeOff) {
     }
   } catch (err: any) {
     console.error("❌ Delete failed:", err);
-    alert("Error deleting: " + err.message);
+    toast.error(`Error deleting: ${err.message}`);
   }
 };
-
-
-
 
   
   // 🧩 Patch: freeze FullCalendar's scrollbar compensation once mounted
@@ -1388,7 +1388,7 @@ if (isTimeOff) {
                       }
                     } catch (err: any) {
                       console.error("Delete button error:", err);
-                      alert("Error preparing delete: " + err.message);
+                      toast.error(`Error preparing delete: ${err.message}`);
                     }
                   }}
                   className="bg-red-600 text-white hover:bg-red-700"

@@ -15,7 +15,6 @@ import {
 } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   Card,
   CardHeader,
@@ -33,6 +32,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { toast } from "sonner"; // ⚡ Add at top of file if not already imported
+
 
 // ---------------- constants ----------------
 const HOLIDAYS = [
@@ -74,6 +75,7 @@ interface Availability {
   start_time: string;
   end_time: string;
   is_active: boolean;
+  slot_interval?: number;
 }
 
 interface HoursTabProps {
@@ -140,8 +142,8 @@ function computeHolidayDates(key: string, startDate: Date, endDate: Date): Date[
 export default function HoursTab({ providerId, onDirtyChange }: HoursTabProps) {
   const { availability: ctxHours, reload, loading } = useSettings();
   const [hours, setHours] = useState<Availability[]>([]);
-  const [everyOtherSat, setEveryOtherSat] = useState(false);
-  const [satStartDate, setSatStartDate] = useState<string>("");
+  const [saving, setSaving] = useState(false);
+
   const [holidaySelections, setHolidaySelections] = useState<string[]>([]);
   const [dirty, setDirty] = useState(false);
   const [lastSavedState, setLastSavedState] = useState<any | null>(null);
@@ -229,14 +231,12 @@ function isEqualState(a: any, b: any): boolean {
     const current = {
       hours,
       holidaySelections,
-      everyOtherSat,
-      satStartDate,
     };
 
     const isSame = isEqualState(current, lastSavedState);
     setDirty(!isSame);
     onDirtyChange?.(!isSame);
-  }, [hours, holidaySelections, everyOtherSat, satStartDate]);
+  }, [hours, holidaySelections]);
 
   // simple manual setter still available
   const markDirty = (val: boolean = true) => {
@@ -257,13 +257,13 @@ function isEqualState(a: any, b: any): boolean {
     if (!lastSavedState) return;
 
     const isSame = isEqualState(
-      { hours, holidaySelections, everyOtherSat, satStartDate },
+      { hours, holidaySelections },
       lastSavedState
     );
 
     setDirty(!isSame);
     onDirtyChange?.(!isSame);
-  }, [hours, holidaySelections, everyOtherSat, satStartDate]);
+  }, [hours, holidaySelections]);
 
 // --- load context & provider data ---
 useEffect(() => {
@@ -271,6 +271,7 @@ useEffect(() => {
   let loadedEveryOtherSat = false;
   let loadedSatStartDate = "";
   let loadedHolidays: string[] = [];
+
 
   async function loadAll() {
     // 1️⃣ Load hours from context
@@ -294,8 +295,6 @@ useEffect(() => {
     if (providerData) {
       loadedEveryOtherSat = !!providerData.every_other_saturday;
       loadedSatStartDate = providerData.saturday_start_date || "";
-      setEveryOtherSat(loadedEveryOtherSat);
-      setSatStartDate(loadedSatStartDate);
     }
 
     // 3️⃣ Load provider holidays
@@ -311,11 +310,10 @@ useEffect(() => {
 
     // 4️⃣ ✅ Now that everything is loaded, capture a stable baseline
     setLastSavedState({
-      hours: loadedHours ?? [],
-      everyOtherSat: loadedEveryOtherSat,
-      satStartDate: loadedSatStartDate,
-      holidaySelections: loadedHolidays,
+      hours,
+      holidaySelections,
     });
+
 
     // 5️⃣ And reset dirty to false
     setDirty(false);
@@ -349,7 +347,7 @@ useEffect(() => {
         !(block.end_time <= h.start_time || block.start_time >= h.end_time)
     );
     if (overlaps) {
-      alert("This block overlaps an existing block for the same day.");
+      toast.error("This block overlaps an existing block for the same day.");
       return;
     }
     newHours[idx] = block;
@@ -418,9 +416,12 @@ useEffect(() => {
     markDirty();
   };
 
-  // --- save logic (unchanged) ---
-  const saveHours = async () => {
-    // Save availability
+// --- save logic (updated) ---
+const saveHours = async () => {
+  try {
+    setSaving(true);
+
+    // 🗂️ Step 1: Upsert all availability rows (with slot_interval)
     const { data: existing } = await supabase
       .from("availability")
       .select("id")
@@ -433,6 +434,8 @@ useEffect(() => {
     const prepared = hours.map((h) => ({
       ...h,
       id: h.id ?? generateId(),
+      provider_id: providerId,
+      slot_interval: h.slot_interval ?? 30, // ✅ new field
     }));
 
     const { error: upsertError } = await supabase
@@ -440,7 +443,7 @@ useEffect(() => {
       .upsert(prepared);
 
     if (upsertError) {
-      alert("Error saving hours: " + upsertError.message);
+      toast.error(`Error saving hours: ${upsertError.message}`);
       return;
     }
 
@@ -448,74 +451,14 @@ useEffect(() => {
       await supabase.from("availability").delete().in("id", idsToDelete);
     }
 
-    // Save provider Saturday settings
-    const { error: providerError } = await supabase
-      .from("providers")
-      .update({
-        every_other_saturday: everyOtherSat,
-        saturday_start_date: satStartDate || null,
-      })
-      .eq("id", providerId);
-
-    if (providerError) {
-      alert("Error saving Saturday settings: " + providerError.message);
-      return;
-    }
-
-    // Reset time_off for Sat + holidays
+    // 🧹 Step 2: Clean up any legacy every-other-Saturday time_off
     await supabase
       .from("time_off")
       .delete()
       .eq("provider_id", providerId)
-      .in("reason", [
-        "every_other_saturday",
-        ...HOLIDAYS.map((h) => `holiday:${h.key}`),
-      ]);
+      .eq("reason", "every_other_saturday");
 
-    // Generate Sat closures
-    if (everyOtherSat && satStartDate) {
-      const base = new Date(satStartDate);
-      base.setHours(0, 0, 0, 0);
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const endRange = new Date(today);
-      endRange.setFullYear(endRange.getFullYear() + 1);
-
-      const newRows: any[] = [];
-      let current = new Date(today);
-      while (current.getDay() !== 6) current.setDate(current.getDate() + 1);
-
-      while (current <= endRange) {
-        const diffWeeks = Math.floor(
-          (current.getTime() - base.getTime()) / (1000 * 60 * 60 * 24 * 7)
-        );
-        if (diffWeeks % 2 === 1) {
-          const s = new Date(current);
-          s.setHours(0, 0, 0, 0);
-          const e = new Date(current);
-          e.setHours(23, 59, 59, 999);
-          newRows.push({
-            provider_id: providerId,
-            start_time: s.toISOString(),
-            end_time: e.toISOString(),
-            reason: "every_other_saturday",
-          });
-        }
-        current.setDate(current.getDate() + 7);
-      }
-
-      if (newRows.length > 0) {
-        const { error: toError } = await supabase
-          .from("time_off")
-          .insert(newRows);
-        if (toError) {
-          alert("Error saving Saturday closures: " + toError.message);
-          return;
-        }
-      }
-    }
-
-    // Save holiday selections + generate closures
+    // 🗓️ Step 3: Save holiday selections and generate time_off
     await supabase.from("provider_holidays").delete().eq("provider_id", providerId);
 
     if (holidaySelections.length > 0) {
@@ -553,26 +496,30 @@ useEffect(() => {
           .from("time_off")
           .insert(holidayRows);
         if (holidayErr) {
-          alert("Error saving holiday closures: " + holidayErr.message);
+          toast.error(`Error saving holiday closures: ${holidayErr.message}`);
           return;
         }
       }
     }
 
-    alert("Hours & holiday closures saved ✅");
+    // ✅ Step 4: Wrap up
+    toast.success("Hours, slot intervals, and holiday closures saved successfully ✅");
     markDirty(false);
     reload();
     setLastSavedState({
       hours,
       holidaySelections,
-      everyOtherSat,
-      satStartDate,
     });
-    setDirty(false);
     onDirtyChange?.(false);
+  } catch (err: any) {
+    console.error("❌ Error saving hours:", err.message);
+    toast.error(`Error saving hours: ${err.message}`);
+  } finally {
+    setSaving(false);
+    setDirty(false);
+  }
+};
 
-
-  };
 
 
   if (loading)
@@ -707,37 +654,35 @@ useEffect(() => {
         })}
       </div>
 
-      {/* Every Other Saturday */}
+      {/* Appointment Start Interval */}
       <Card className="bg-gray-50 border-gray-200">
         <CardContent className="space-y-3 p-4">
-          <div className="flex items-center gap-2">
-            <Checkbox
-              checked={everyOtherSat}
-              onCheckedChange={(val) => {
-                setEveryOtherSat(!!val);
-                markDirty();
-              }}
-            />
-            <label className="text-sm font-medium text-gray-700">
-              Closed every other Saturday
-            </label>
-          </div>
-          {everyOtherSat && (
-            <div>
-              <label className="block text-sm font-medium mb-1">
-                Start with this Saturday as the first open one:
-              </label>
-              <Input
-                type="date"
-                value={satStartDate}
-                onChange={(e) => {
-                  setSatStartDate(e.target.value);
-                  markDirty();
-                }}
-                className="max-w-xs"
-              />
-            </div>
-          )}
+          <label className="block text-sm font-medium text-gray-700">
+            Appointment start times every:
+          </label>
+
+          <select
+            className="w-56 border rounded-md p-2 text-sm bg-white cursor-pointer focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            value={hours[0]?.slot_interval || 30}
+            onChange={(e) => {
+              const newInterval = Number(e.target.value);
+              const updated = hours.map((h) => ({ ...h, slot_interval: newInterval }));
+              setHours(updated);
+              markDirty();
+            }}
+          >
+            <option value={60}>60 minutes (on the hour)</option>
+            <option value={30}>30 minutes (:00, :30)</option>
+            <option value={20}>20 minutes (:00, :20, :40)</option>
+            <option value={15}>15 minutes (:00, :15, :30, :45)</option>
+            <option value={10}>10 minutes (:00, :10, :20, :30, :40, :50)</option>
+            <option value={5}>5 minutes (every 5 minutes)</option>
+          </select>
+
+          <p className="text-xs text-gray-500">
+            Controls which times appear on your booking page. For example, 15-minute
+            intervals allow appointments at 9:00, 9:15, 9:30, etc.
+          </p>
         </CardContent>
       </Card>
 
@@ -814,14 +759,16 @@ useEffect(() => {
         </span>
         <Button
           onClick={saveHours}
-          disabled={!dirty}
+          disabled={!dirty || saving}
           className={`${
-            dirty
+            saving
+              ? "bg-gray-400 text-white cursor-wait"
+              : dirty
               ? "bg-green-600 hover:bg-green-700 text-white"
               : "bg-gray-300 text-gray-600 cursor-not-allowed"
           }`}
         >
-          Save All Hours
+          {saving ? "Saving…" : "Save All Hours"}
         </Button>
       </div>
     </div>

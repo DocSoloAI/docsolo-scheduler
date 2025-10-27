@@ -9,6 +9,7 @@ import {
   CardContent,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { toast } from "react-hot-toast";
 
 interface Service {
   id?: string;
@@ -128,7 +129,7 @@ export default function ServicesTab({ providerId, onDirtyChange }: ServicesTabPr
 
     const { error: upsertError } = await supabase.from("services").upsert(prepared);
     if (upsertError) {
-      alert("Error saving services: " + upsertError.message);
+      toast.error(`Error saving services: ${upsertError.message}`);
       return;
     }
 
@@ -139,7 +140,7 @@ export default function ServicesTab({ providerId, onDirtyChange }: ServicesTabPr
     setDirty(false);
     onDirtyChange?.(false);
     reload();
-    alert("✅ Services saved successfully.");
+    toast.success("Services saved successfully ✅");
   };
 
   if (loading) {

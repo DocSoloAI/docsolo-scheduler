@@ -12,6 +12,7 @@ import { useSearchParams } from "react-router-dom";
 import { sendTemplatedEmail } from "@/lib/email/sendTemplatedEmail";
 import { useSettings } from "@/context/SettingsContext";
 import { upsertPatientAndCreateAppointment } from "@/lib/db";
+import { toast } from "react-hot-toast";
 
 export default function BookingPage() {
   const { services } = useSettings();
@@ -559,7 +560,7 @@ export default function BookingPage() {
 
     } catch (err) {
       console.error("Booking error:", err);
-      alert("Something went wrong booking your appointment.");
+      toast.error("Something went wrong booking your appointment.");
     }
   };
 
@@ -929,9 +930,8 @@ export default function BookingPage() {
                                   dd <= 31 &&
                                   yyyy > 1900 &&
                                   yyyy <= new Date().getFullYear();
-
                                 if (!isValid) {
-                                  alert("Please enter a valid date of birth (MM/DD/YYYY).");
+                                  toast.error("Please enter a valid date of birth (MM/DD/YYYY).");
                                   setBirthday("");
                                 }
                               }
@@ -977,7 +977,7 @@ export default function BookingPage() {
                           onBlur={() => {
                             const digits = cellPhone.replace(/\D/g, "");
                             if (digits.length !== 10) {
-                              alert("Please enter a valid 10-digit mobile number.");
+                              toast.error("Please enter a valid 10-digit mobile number.");
                               setCellPhone("");
                             }
                           }}
