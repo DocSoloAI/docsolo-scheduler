@@ -5,6 +5,9 @@
   text-align: center;
 }
 
+/* =======================================
+   🔷 Base App Visuals (unchanged)
+   ======================================= */
 .logo {
   height: 6em;
   padding: 1.5em;
@@ -36,51 +39,48 @@
 .card {
   padding: 2em;
 }
-
 .read-the-docs {
   color: #888;
 }
-@media (max-width: 640px) {
-  .fc-toolbar.fc-header-toolbar {
-    flex-wrap: wrap;
-    justify-content: space-between;
-    gap: 0.25rem;
-  }
 
-  .fc-toolbar-title {
-    font-size: 0.9rem;
-  }
-
-  .fc-button-group,
-  .fc-button {
-    font-size: 0.75rem;
-    padding: 0.2rem 0.4rem;
-  }
-
-  .fc-toolbar-chunk {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.25rem;
-  }
-}
-/* 🌙 Smooth dropdown animation and polish */
-@keyframes dropdownFadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(-4px) scale(0.98);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
+/* =======================================
+   ✅ Final FullCalendar Header Styling
+   ======================================= */
+.fc-header-toolbar {
+  display: flex !important;
+  flex-direction: row !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  padding-bottom: 0.4rem;
+  margin-bottom: 0.6rem;
+  transition: opacity 0.05s linear;
+  opacity: 0; /* 🟡 Start invisible instead of hidden (no layout jump) */
 }
 
-#fc-view-dropdown-menu {
-  animation: dropdownFadeIn 0.15s ease-out forwards;
-  backdrop-filter: blur(6px);
-  transition: opacity 0.2s ease, transform 0.2s ease;
+.fc-header-toolbar.fc-toolbar-ready {
+  opacity: 1; /* ✅ Fade in smoothly when ready */
 }
 
-#fc-view-dropdown-menu div {
-  transition: background 0.15s ease;
+.calendar-title-row {
+  text-align: center;
+  font-size: 1.05rem;
+  font-weight: 500;
+  margin-bottom: 0.4rem;
+}
+
+.fc-toolbar-title {
+  margin: 0 !important;
+}
+
+.fc-button {
+  font-size: 0.8rem !important;
+  padding: 0.3rem 0.6rem !important;
+  border-radius: 6px !important;
+}
+
+/* 🧩 Hide header instantly until layout is ready */
+.fc-header-toolbar:not(.fc-toolbar-ready) {
+  opacity: 0 !important;
+  pointer-events: none;
 }

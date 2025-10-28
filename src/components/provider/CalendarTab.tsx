@@ -38,6 +38,7 @@ import {
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { toast } from "react-hot-toast";
 
+
 // === Email helper ===
 async function sendDualEmail(
   templateType: "confirmation" | "update" | "cancellation" | "reminder",
@@ -145,8 +146,7 @@ interface AppointmentEvent {
 }
 
 export default function CalendarTab({ providerId }: { providerId: string }) {
-  const calendarRef = useRef<any>(null);
-  const [currentView, setCurrentView] = useState("timeGridWeek");
+  const [currentView] = useState("timeGridWeek");
   const [timeOffMode, setTimeOffMode] = useState<"hours" | "day" | "range">(
     "hours"
   );
@@ -192,7 +192,17 @@ export default function CalendarTab({ providerId }: { providerId: string }) {
   const [saving, setSaving] = useState(false);
   const [seriesDeleteOpen, setSeriesDeleteOpen] = useState(false);
   const [pendingGroupId, setPendingGroupId] = useState<string | null>(null);
+  const calendarRef = useRef<any>(null);
 
+useEffect(() => {
+  const handleResize = () => {
+    if (calendarRef.current) {
+      calendarRef.current.getApi().updateSize();
+    }
+  };
+  window.addEventListener("resize", handleResize);
+  return () => window.removeEventListener("resize", handleResize);
+}, []);
 
 useEffect(() => {
   const storedDate = localStorage.getItem("calendarFocusDate");
@@ -240,119 +250,118 @@ const tryGoto = () => {
 }, []);
 
 
-// ✅ Resilient calendar loader that merges appointments + time off reliably
-const loadEvents = async () => {
-  try {
-    // ---------- Load Appointments ----------
-    const { data: appts, error: apptError } = await supabase
-      .from("appointments")
-      .select(`
-        id, start_time, end_time, status, patient_id, service_id, patient_note,
-        patients ( first_name, last_name ),
-        services ( name, color )
-      `)
-      .eq("provider_id", providerId)
-      .not("status", "eq", "cancelled"); // ✅ show all non-cancelled appointments
+  // ✅ Resilient calendar loader that merges appointments + time off reliably
+  const loadEvents = async () => {
+    try {
+      // ---------- Load Appointments ----------
+      const { data: appts, error: apptError } = await supabase
+        .from("appointments")
+        .select(`
+          id, start_time, end_time, status, patient_id, service_id, patient_note,
+          patients ( first_name, last_name ),
+          services ( name, color )
+        `)
+        .eq("provider_id", providerId)
+        .not("status", "eq", "cancelled"); // ✅ show all non-cancelled appointments
 
-    if (apptError) throw new Error(apptError.message);
-    console.log("📋 Appointments loaded:", appts?.length ?? 0);
+      if (apptError) throw new Error(apptError.message);
+      console.log("📋 Appointments loaded:", appts?.length ?? 0);
 
-    const mappedAppts =
-      appts?.map((appt: any) => {
-        const patient = Array.isArray(appt.patients)
-          ? appt.patients[0]
-          : appt.patients;
-        const serviceColor = appt.services?.color || "#3b82f6";
-        const color =
-          appt.status === "time_off" ? "#fca5a5" : serviceColor;
+      const mappedAppts =
+        appts?.map((appt: any) => {
+          const patient = Array.isArray(appt.patients)
+            ? appt.patients[0]
+            : appt.patients;
+          const serviceColor = appt.services?.color || "#3b82f6";
+          const color =
+            appt.status === "time_off" ? "#fca5a5" : serviceColor;
 
-        // 🕐 Convert UTC → Local properly
-        const startLocal = new Date(appt.start_time);
-        const endLocal = new Date(appt.end_time);
-        const startFixed = new Date(startLocal.getTime() - startLocal.getTimezoneOffset() * 60000);
-        const endFixed = new Date(endLocal.getTime() - endLocal.getTimezoneOffset() * 60000);
+          // 🕐 Convert UTC → Local properly
+          const startLocal = new Date(appt.start_time);
+          const endLocal = new Date(appt.end_time);
+          const startFixed = new Date(startLocal.getTime() - startLocal.getTimezoneOffset() * 60000);
+          const endFixed = new Date(endLocal.getTime() - endLocal.getTimezoneOffset() * 60000);
 
-        return {
-          id: appt.id,
-          title:
-            appt.status === "time_off"
-              ? "OFF"
-              : `${patient?.first_name ?? ""} ${patient?.last_name ?? ""}`.trim(),
-          start: startFixed.toISOString(),
-          end: endFixed.toISOString(),
-          backgroundColor: color,
-          borderColor: color,
-          textColor: "#fff",
-          extendedProps: {
-            source: "appointments",
-            patient_id: appt.patient_id,
-            service_id: appt.service_id,
-            status: appt.status,
-            patient_note: appt.patient_note || null,
-          },
-        };
-      }) ?? [];
-
-
-    // ---------- Load Time-Off ----------
-    const { data: offs, error: offError } = await supabase
-      .from("time_off")
-      .select("id, start_time, end_time, reason, meta_repeat")
-      .eq("provider_id", providerId);
-
-    if (offError) throw new Error(offError.message);
-
-    const mappedOffs =
-      offs?.map((o) => {
-        const startLocal = new Date(o.start_time);
-        const endLocal = new Date(o.end_time);
-
-        // 🕐 Convert UTC → Local only for non-holiday events
-        const startFixed = new Date(
-          startLocal.getTime() - startLocal.getTimezoneOffset() * 60000
-        );
-        const endFixed = new Date(
-          endLocal.getTime() - endLocal.getTimezoneOffset() * 60000
-        );
-
-        const isHoliday = o.reason?.startsWith("holiday:");
-
-        return {
-          id: o.id,
-          title: isHoliday ? "Office Closed" : o.reason || "Closed",
-          start: isHoliday ? o.start_time : startFixed.toISOString(),
-          end: isHoliday ? o.end_time : endFixed.toISOString(),
-          allDay: true, // ✅ always render time_off as full-day blocks
-          backgroundColor: "#fca5a5",
-          borderColor: "#fca5a5",
-          textColor: "#fff",
-          extendedProps: {
-            source: "time_off",
-            status: "time_off",
-            meta_repeat: o.meta_repeat || null,
-          },
-        };
-      }) ?? [];
+          return {
+            id: appt.id,
+            title:
+              appt.status === "time_off"
+                ? "OFF"
+                : `${patient?.first_name ?? ""} ${patient?.last_name ?? ""}`.trim(),
+            start: startFixed.toISOString(),
+            end: endFixed.toISOString(),
+            backgroundColor: color,
+            borderColor: color,
+            textColor: "#fff",
+            extendedProps: {
+              source: "appointments",
+              patient_id: appt.patient_id,
+              service_id: appt.service_id,
+              status: appt.status,
+              patient_note: appt.patient_note || null,
+            },
+          };
+        }) ?? [];
 
 
+      // ---------- Load Time-Off ----------
+      const { data: offs, error: offError } = await supabase
+        .from("time_off")
+        .select("id, start_time, end_time, reason, meta_repeat")
+        .eq("provider_id", providerId);
 
-    // ---------- Merge & Render ----------
-    const allEvents = [...mappedAppts, ...mappedOffs];
-    setEvents(allEvents);
+      if (offError) throw new Error(offError.message);
 
-    if (calendarRef.current) {
-      const api = calendarRef.current.getApi();
-      api.removeAllEvents();
-      allEvents.forEach((e) => api.addEvent(e));
+      const mappedOffs =
+        offs?.map((o) => {
+          const startLocal = new Date(o.start_time);
+          const endLocal = new Date(o.end_time);
+
+          // 🕐 Convert UTC → Local only for non-holiday events
+          const startFixed = new Date(
+            startLocal.getTime() - startLocal.getTimezoneOffset() * 60000
+          );
+          const endFixed = new Date(
+            endLocal.getTime() - endLocal.getTimezoneOffset() * 60000
+          );
+
+          const isHoliday = o.reason?.startsWith("holiday:");
+
+          return {
+            id: o.id,
+            title: isHoliday ? "Office Closed" : o.reason || "Closed",
+            start: isHoliday ? o.start_time : startFixed.toISOString(),
+            end: isHoliday ? o.end_time : endFixed.toISOString(),
+            allDay: true, // ✅ always render time_off as full-day blocks
+            backgroundColor: "#fca5a5",
+            borderColor: "#fca5a5",
+            textColor: "#fff",
+            extendedProps: {
+              source: "time_off",
+              status: "time_off",
+              meta_repeat: o.meta_repeat || null,
+            },
+          };
+        }) ?? [];
+
+
+
+      // ---------- Merge & Render ----------
+      const allEvents = [...mappedAppts, ...mappedOffs];
+      setEvents(allEvents);
+
+      if (calendarRef.current) {
+        const api = calendarRef.current.getApi();
+        api.removeAllEvents();
+        allEvents.forEach((e) => api.addEvent(e));
+      }
+      console.log("🧩 First few events:", allEvents.slice(0, 3));
+
+      console.log(`✅ Calendar reloaded: ${allEvents.length} total events`);
+    } catch (err: any) {
+      console.error("❌ loadEvents failed:", err.message);
     }
-    console.log("🧩 First few events:", allEvents.slice(0, 3));
-
-    console.log(`✅ Calendar reloaded: ${allEvents.length} total events`);
-  } catch (err: any) {
-    console.error("❌ loadEvents failed:", err.message);
-  }
-};
-
+  };
 
 
   useEffect(() => {
@@ -829,34 +838,74 @@ const handleDelete = async () => {
   }
 };
 
+// 🧩 Patch: freeze FullCalendar's scrollbar compensation once mounted
+useEffect(() => {
+  if (!calendarRef.current) return;
 
+  const calendarApi = calendarRef.current.getApi();
+  const origUpdateSize = calendarApi.updateSize;
+  calendarApi.updateSize = function () {
+    document.querySelectorAll(".fc-scroller").forEach((el) => {
+      (el as HTMLElement).style.paddingRight = "0px";
+      (el as HTMLElement).style.marginRight = "0px";
+    });
+    try {
+      return origUpdateSize.call(this);
+    } catch (e) {
+      console.warn("🧩 updateSize patch caught:", e);
+    }
+  };
+  console.log("🧩 FullCalendar updateSize patched");
+}, []);
 
-  // 🧩 Patch: freeze FullCalendar's scrollbar compensation once mounted
-  useEffect(() => {
-    if (!calendarRef.current) return;
+// ✅ Force custom date range title above buttons
+useEffect(() => {
+  const calendarRoot = document.querySelector(".fc");
+  if (!calendarRoot) return;
 
-    const calendarApi = calendarRef.current.getApi();
-    const origUpdateSize = calendarApi.updateSize;
+  const injectTitle = () => {
+    const toolbar = calendarRoot.querySelector(".fc-header-toolbar");
+    const titleEl = calendarRoot.querySelector(".fc-toolbar-title");
+    if (!toolbar || !titleEl) return;
 
-    // Override updateSize to ignore fake scrollbar width changes
-    calendarApi.updateSize = function () {
-      const scrollEls = document.querySelectorAll('.fc-scroller');
-      scrollEls.forEach((el) => {
-        (el as HTMLElement).style.paddingRight = "0px";
-        (el as HTMLElement).style.marginRight = "0px";
-      });
-      try {
-        return origUpdateSize.call(this);
-      } catch (e) {
-        console.warn("🧩 updateSize patch caught:", e);
+    // Remove duplicates
+    calendarRoot.querySelectorAll(".custom-calendar-title").forEach(el => el.remove());
+
+    // Create and insert our title above toolbar
+    const customTitle = document.createElement("div");
+    customTitle.className = "custom-calendar-title";
+    customTitle.textContent = titleEl.textContent || "";
+    toolbar.parentElement?.insertBefore(customTitle, toolbar);
+
+    // Sync when title text changes
+    const observer = new MutationObserver(() => {
+      const newText = titleEl.textContent || "";
+      if (customTitle.textContent !== newText) {
+        customTitle.textContent = newText;
       }
-    };
+    });
+    observer.observe(titleEl, { childList: true, subtree: true });
 
-    console.log("🧩 FullCalendar updateSize patched");
-  }, []);
+    return observer;
+  };
 
-  if (loading) return <div className="p-4 text-gray-500">Loading calendar…</div>;
+  // Inject once after calendar loads
+  const observer = injectTitle();
 
+  // Watch for toolbar re-renders and re-inject
+  const rerenderWatcher = new MutationObserver(() => injectTitle());
+  rerenderWatcher.observe(calendarRoot, { childList: true, subtree: true });
+
+  return () => {
+    observer?.disconnect?.();
+    rerenderWatcher.disconnect();
+  };
+}, []);
+
+
+
+// 🟩 keep the conditional after all hooks
+if (loading) return <div className="p-4 text-gray-500">Loading calendar…</div>;
 
   return (
     <div className="p-2">
@@ -986,20 +1035,54 @@ const handleDelete = async () => {
             },
           }}
 
-    
-          headerToolbar={
-            window.innerWidth < 640
-              ? {
-                  left: "prev,next",
-                  center: "title",
-                  right: "today viewDropdown", // 👈 new compact mobile dropdown
-                }
-              : {
-                  left: "prev,next today",
-                  center: "title",
-                  right: "dayGridMonth,timeGridWeek,timeGridDay",
-                }
-          }
+          headerToolbar={{
+            left: "prev,next today",
+            center: "title",
+            right: "viewDropdown",
+          }}
+
+
+          titleFormat={{ year: "numeric", month: "short", day: "numeric" }}
+
+          viewDidMount={() => {
+            // Wait for FullCalendar to fully render its toolbar before moving things
+            requestAnimationFrame(() => {
+              const toolbar = document.querySelector(".fc-header-toolbar");
+              if (!toolbar) return;
+
+              const titleEl = toolbar.querySelector(".fc-toolbar-title");
+              if (!titleEl) return;
+
+              // ✅ Create wrapper above toolbar if missing
+              let titleWrapper = document.querySelector(".calendar-title-row");
+              if (!titleWrapper) {
+                titleWrapper = document.createElement("div");
+                titleWrapper.className = "calendar-title-row";
+                toolbar.parentElement?.insertBefore(titleWrapper, toolbar);
+              }
+
+              // ✅ Move title element into wrapper
+              titleWrapper.innerHTML = "";
+              titleWrapper.appendChild(titleEl);
+
+              // ✅ Style wrapper (ensures alignment + spacing)
+              const tw = titleWrapper as HTMLElement;
+              tw.style.textAlign = "center";
+              tw.style.width = "100%";
+              tw.style.fontSize = "1rem";
+              tw.style.fontWeight = "500";
+              tw.style.marginBottom = "0.4rem";
+
+              // ✅ Restore toolbar layout and mark ready (unhide)
+              const tb = toolbar as HTMLElement;
+              tb.style.display = "flex";
+              tb.style.flexDirection = "row";
+              tb.style.justifyContent = "space-between";
+              tb.style.alignItems = "center";
+              tb.classList.add("fc-toolbar-ready"); // unhide toolbar now that it's ready
+            });
+          }}
+
 
 
           slotMinTime="08:00:00"
@@ -1029,7 +1112,6 @@ const handleDelete = async () => {
             }
           }}
 
-          viewDidMount={(arg) => setCurrentView(arg.view.type)}
           handleWindowResize={false}
 
           views={{
