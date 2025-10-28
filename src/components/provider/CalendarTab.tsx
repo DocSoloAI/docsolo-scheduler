@@ -1045,7 +1045,10 @@ if (loading) return <div className="p-4 text-gray-500">Loading calendar…</div>
           titleFormat={{ year: "numeric", month: "short", day: "numeric" }}
 
           viewDidMount={() => {
-            // Delay until after FC renders its header
+            // ✅ Prevent multiple executions
+            if ((window as any).__calendarHeaderInit) return;
+            (window as any).__calendarHeaderInit = true;
+
             requestAnimationFrame(() => {
               const toolbar = document.querySelector(".fc-header-toolbar");
               if (!toolbar) return;
@@ -1053,7 +1056,7 @@ if (loading) return <div className="p-4 text-gray-500">Loading calendar…</div>
               const titleEl = toolbar.querySelector(".fc-toolbar-title");
               if (!titleEl) return;
 
-              // ✅ Only create wrapper if it doesn't already exist
+              // ✅ Create wrapper if missing
               let titleWrapper = document.querySelector(".calendar-title-row");
               if (!titleWrapper) {
                 titleWrapper = document.createElement("div");
@@ -1061,13 +1064,13 @@ if (loading) return <div className="p-4 text-gray-500">Loading calendar…</div>
                 toolbar.parentElement?.insertBefore(titleWrapper, toolbar);
               }
 
-              // ✅ Prevent double-append by checking current parent
+              // ✅ Move title into wrapper if not already there
               if (titleEl.parentElement !== titleWrapper) {
                 titleWrapper.innerHTML = "";
                 titleWrapper.appendChild(titleEl);
               }
 
-              // ✅ Style wrapper (applies once)
+              // ✅ Style the wrapper
               const tw = titleWrapper as HTMLElement;
               tw.style.textAlign = "center";
               tw.style.width = "100%";
@@ -1075,7 +1078,7 @@ if (loading) return <div className="p-4 text-gray-500">Loading calendar…</div>
               tw.style.fontWeight = "500";
               tw.style.marginBottom = "0.4rem";
 
-              // ✅ Restore toolbar layout if not already applied
+              // ✅ Restore toolbar layout if not already ready
               const tb = toolbar as HTMLElement;
               if (!tb.classList.contains("fc-toolbar-ready")) {
                 tb.style.display = "flex";
@@ -1086,6 +1089,7 @@ if (loading) return <div className="p-4 text-gray-500">Loading calendar…</div>
               }
             });
           }}
+
 
 
           slotMinTime="08:00:00"
