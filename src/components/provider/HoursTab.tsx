@@ -138,6 +138,15 @@ function computeHolidayDates(key: string, startDate: Date, endDate: Date): Date[
   return dates;
 }
 
+// --- helper to format a Date as YYYY-MM-DDTHH:mm:ss without timezone ---
+function toLocalIsoString(date: Date, endOfDay: boolean = false): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const time = endOfDay ? "23:59:59" : "00:00:00";
+  return `${year}-${month}-${day}T${time}`;
+}
+
 // ---------------- component ----------------
 export default function HoursTab({ providerId, onDirtyChange }: HoursTabProps) {
   const { availability: ctxHours, reload, loading } = useSettings();
@@ -267,61 +276,55 @@ function isEqualState(a: any, b: any): boolean {
 
 // --- load context & provider data ---
 useEffect(() => {
-  let loadedHours: Availability[] | null = null;
-  let loadedEveryOtherSat = false;
-  let loadedSatStartDate = "";
-  let loadedHolidays: string[] = [];
-
-
   async function loadAll() {
-    // 1️⃣ Load hours from context
-    if (ctxHours) {
-      const normalized = ctxHours.map((h: any) => ({
-        ...h,
-        start_time: h.start_time.slice(0, 5),
-        end_time: h.end_time.slice(0, 5),
-      }));
-      loadedHours = normalized;
-      setHours(normalized);
+    try {
+      let normalizedHours: Availability[] = [];
+      let holidays: string[] = [];
+
+      // 1️⃣ Load hours from context (normalize to HH:mm)
+      if (ctxHours && Array.isArray(ctxHours)) {
+        normalizedHours = ctxHours.map((h: any) => ({
+          ...h,
+          start_time: h.start_time?.slice(0, 5) ?? "",
+          end_time: h.end_time?.slice(0, 5) ?? "",
+        }));
+        setHours(normalizedHours);
+      }
+
+      // 2️⃣ Load provider holidays
+      const { data: holidayData, error: holidayErr } = await supabase
+        .from("provider_holidays")
+        .select("holiday_key")
+        .eq("provider_id", providerId);
+
+      if (holidayErr) {
+        console.error("❌ Error loading provider holidays:", holidayErr.message);
+      } else if (holidayData) {
+        holidays = holidayData.map((h) => h.holiday_key);
+        setHolidaySelections(holidays);
+      }
+
+      // 3️⃣ ✅ Capture stable baseline for dirty tracking
+      setLastSavedState({
+        hours: normalizedHours,
+        holidaySelections: holidays,
+      });
+
+      // 4️⃣ Reset dirty state
+      setDirty(false);
+      onDirtyChange?.(false);
+
+      console.log("✅ HoursTab: provider data loaded successfully");
+    } catch (err: any) {
+      console.error("❌ Error in loadAll:", err.message);
+      toast.error("Error loading provider data");
     }
-
-    // 2️⃣ Load provider Saturday settings
-    const { data: providerData } = await supabase
-      .from("providers")
-      .select("every_other_saturday, saturday_start_date")
-      .eq("id", providerId)
-      .single();
-
-    if (providerData) {
-      loadedEveryOtherSat = !!providerData.every_other_saturday;
-      loadedSatStartDate = providerData.saturday_start_date || "";
-    }
-
-    // 3️⃣ Load provider holidays
-    const { data: holidayData } = await supabase
-      .from("provider_holidays")
-      .select("holiday_key")
-      .eq("provider_id", providerId);
-
-    if (holidayData) {
-      loadedHolidays = holidayData.map((h) => h.holiday_key);
-      setHolidaySelections(loadedHolidays);
-    }
-
-    // 4️⃣ ✅ Now that everything is loaded, capture a stable baseline
-    setLastSavedState({
-      hours,
-      holidaySelections,
-    });
-
-
-    // 5️⃣ And reset dirty to false
-    setDirty(false);
-    onDirtyChange?.(false);
   }
 
   loadAll();
 }, [ctxHours, providerId]);
+
+
 
   // --- hour editing helpers ---
   const updateHour = <K extends keyof Availability>(
@@ -461,6 +464,13 @@ const saveHours = async () => {
     // 🗓️ Step 3: Save holiday selections and generate time_off
     await supabase.from("provider_holidays").delete().eq("provider_id", providerId);
 
+    // 🧹 Always remove old holiday-related time_off rows (even if none selected)
+    await supabase
+      .from("time_off")
+      .delete()
+      .eq("provider_id", providerId)
+      .filter("reason", "ilike", "holiday:%");
+
     if (holidaySelections.length > 0) {
       await supabase.from("provider_holidays").insert(
         holidaySelections.map((h) => ({
@@ -478,18 +488,17 @@ const saveHours = async () => {
       for (const key of holidaySelections) {
         const dates = computeHolidayDates(key, today, endRange);
         for (const d of dates) {
-          const s = new Date(d);
-          s.setHours(0, 0, 0, 0);
-          const e = new Date(d);
-          e.setHours(23, 59, 59, 999);
           holidayRows.push({
+            id: generateId(),
             provider_id: providerId,
-            start_time: s.toISOString(),
-            end_time: e.toISOString(),
+            start_time: toLocalIsoString(d, false),  // 👈 Local midnight start
+            end_time: toLocalIsoString(d, true),     // 👈 Local end of day
             reason: `holiday:${key}`,
+            all_day: true,
           });
         }
       }
+
 
       if (holidayRows.length > 0) {
         const { error: holidayErr } = await supabase
@@ -501,6 +510,8 @@ const saveHours = async () => {
         }
       }
     }
+
+
 
     // ✅ Step 4: Wrap up
     toast.success("Hours, slot intervals, and holiday closures saved successfully ✅");
@@ -519,8 +530,6 @@ const saveHours = async () => {
     setDirty(false);
   }
 };
-
-
 
   if (loading)
     return <div className="p-4 text-gray-500">Loading hours…</div>;

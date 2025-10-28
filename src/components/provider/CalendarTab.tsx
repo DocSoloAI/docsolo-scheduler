@@ -240,82 +240,119 @@ const tryGoto = () => {
 }, []);
 
 
-
-// ✅ Clean version
+// ✅ Resilient calendar loader that merges appointments + time off reliably
 const loadEvents = async () => {
-  const { data: appts, error: apptError } = await supabase
-    .from("appointments")
-    .select(`
-      id, start_time, end_time, status, patient_id, service_id, patient_note,
-      patients ( first_name, last_name ),
-      services ( name )
-    `)
-    .eq("provider_id", providerId)
-    .in("status", ["booked", "time_off"]);
+  try {
+    // ---------- Load Appointments ----------
+    const { data: appts, error: apptError } = await supabase
+      .from("appointments")
+      .select(`
+        id, start_time, end_time, status, patient_id, service_id, patient_note,
+        patients ( first_name, last_name ),
+        services ( name, color )
+      `)
+      .eq("provider_id", providerId)
+      .not("status", "eq", "cancelled"); // ✅ show all non-cancelled appointments
 
-  console.log("📋 Appointments loaded:", appts?.length, appts);
+    if (apptError) throw new Error(apptError.message);
+    console.log("📋 Appointments loaded:", appts?.length ?? 0);
 
-  if (apptError) {
-    console.error("Error loading appointments:", apptError.message);
-    return;
+    const mappedAppts =
+      appts?.map((appt: any) => {
+        const patient = Array.isArray(appt.patients)
+          ? appt.patients[0]
+          : appt.patients;
+        const serviceColor = appt.services?.color || "#3b82f6";
+        const color =
+          appt.status === "time_off" ? "#fca5a5" : serviceColor;
+
+        // 🕐 Convert UTC → Local properly
+        const startLocal = new Date(appt.start_time);
+        const endLocal = new Date(appt.end_time);
+        const startFixed = new Date(startLocal.getTime() - startLocal.getTimezoneOffset() * 60000);
+        const endFixed = new Date(endLocal.getTime() - endLocal.getTimezoneOffset() * 60000);
+
+        return {
+          id: appt.id,
+          title:
+            appt.status === "time_off"
+              ? "OFF"
+              : `${patient?.first_name ?? ""} ${patient?.last_name ?? ""}`.trim(),
+          start: startFixed.toISOString(),
+          end: endFixed.toISOString(),
+          backgroundColor: color,
+          borderColor: color,
+          textColor: "#fff",
+          extendedProps: {
+            source: "appointments",
+            patient_id: appt.patient_id,
+            service_id: appt.service_id,
+            status: appt.status,
+            patient_note: appt.patient_note || null,
+          },
+        };
+      }) ?? [];
+
+
+    // ---------- Load Time-Off ----------
+    const { data: offs, error: offError } = await supabase
+      .from("time_off")
+      .select("id, start_time, end_time, reason, meta_repeat")
+      .eq("provider_id", providerId);
+
+    if (offError) throw new Error(offError.message);
+
+    const mappedOffs =
+      offs?.map((o) => {
+        const startLocal = new Date(o.start_time);
+        const endLocal = new Date(o.end_time);
+
+        // 🕐 Convert UTC → Local only for non-holiday events
+        const startFixed = new Date(
+          startLocal.getTime() - startLocal.getTimezoneOffset() * 60000
+        );
+        const endFixed = new Date(
+          endLocal.getTime() - endLocal.getTimezoneOffset() * 60000
+        );
+
+        const isHoliday = o.reason?.startsWith("holiday:");
+
+        return {
+          id: o.id,
+          title: isHoliday ? "Office Closed" : o.reason || "Closed",
+          start: isHoliday ? o.start_time : startFixed.toISOString(),
+          end: isHoliday ? o.end_time : endFixed.toISOString(),
+          allDay: true, // ✅ always render time_off as full-day blocks
+          backgroundColor: "#fca5a5",
+          borderColor: "#fca5a5",
+          textColor: "#fff",
+          extendedProps: {
+            source: "time_off",
+            status: "time_off",
+            meta_repeat: o.meta_repeat || null,
+          },
+        };
+      }) ?? [];
+
+
+
+    // ---------- Merge & Render ----------
+    const allEvents = [...mappedAppts, ...mappedOffs];
+    setEvents(allEvents);
+
+    if (calendarRef.current) {
+      const api = calendarRef.current.getApi();
+      api.removeAllEvents();
+      allEvents.forEach((e) => api.addEvent(e));
+    }
+    console.log("🧩 First few events:", allEvents.slice(0, 3));
+
+    console.log(`✅ Calendar reloaded: ${allEvents.length} total events`);
+  } catch (err: any) {
+    console.error("❌ loadEvents failed:", err.message);
   }
-
-  const mappedAppts = appts.map((appt: any) => {
-    const patient = Array.isArray(appt.patients) ? appt.patients[0] : appt.patients;
-    const service = services.find((s) => String(s.id) === String(appt.service_id));
-
-    const color =
-      appt.status === "time_off"
-        ? "#fca5a5"
-        : service?.color || "#3b82f6";
-
-    return {
-      id: appt.id,
-      title:
-        appt.status === "time_off"
-          ? "OFF"
-          : `${patient?.first_name ?? ""} ${patient?.last_name ?? ""}`.trim(),
-      start: appt.start_time,
-      end: appt.end_time,
-      backgroundColor: color,
-      borderColor: color,
-      textColor: "#fff",
-      extendedProps: {
-        source: "appointments",
-        patient_id: appt.patient_id,
-        service_id: appt.service_id,
-        status: appt.status,
-        patient_note: appt.patient_note || null,
-      },
-    };
-  });
-
-  const { data: offs, error: offError } = await supabase
-    .from("time_off")
-    .select("id, start_time, end_time, reason")
-    .eq("provider_id", providerId);
-
-  if (offError) {
-    console.error("❌ Error loading time off:", offError.message);
-  }
-
-  const mappedOffs =
-    offs?.map((o) => ({
-      id: o.id,
-      title: o.reason || "Closed",
-      start: o.start_time,
-      end: o.end_time,
-      backgroundColor: "#fca5a5",
-      borderColor: "#fca5a5",
-      textColor: "#fff",
-      extendedProps: {
-        source: "time_off",
-        status: "time_off",
-      },
-    })) ?? [];
-
-  setEvents([...mappedAppts, ...mappedOffs]);
 };
+
 
 
   useEffect(() => {
@@ -644,86 +681,102 @@ const handleDelete = async () => {
   if (!editingEvent) return;
 
   try {
-    const isTimeOff =
-      editingEvent.extendedProps?.source === "time_off" ||
-      editingEvent.extendedProps?.status === "time_off";
+    // ✅ Robust detection for Time-Off events
+    const isTimeOff = (() => {
+      const props = editingEvent.extendedProps || {};
+      const title = editingEvent.title?.toLowerCase?.() || "";
+      const status =
+        editingEvent.status?.toLowerCase?.() ||
+        props.status?.toLowerCase?.() ||
+        "";
+      const source =
+        editingEvent.source?.toLowerCase?.() ||
+        props.source?.toLowerCase?.() ||
+        "";
+      const reason = props.reason?.toLowerCase?.() || "";
+      return (
+        title.includes("off") ||
+        title.includes("closed") ||
+        status.includes("off") ||
+        status.includes("time_off") ||
+        source.includes("off") ||
+        source.includes("time_off") ||
+        reason.includes("off") ||
+        reason.includes("closed")
+      );
+    })();
 
-// ---------- 🟥 TIME-OFF ----------
-if (isTimeOff) {
-  // 1️⃣ Identify if part of repeating group
-  const { data: match, error: matchErr } = await supabase
-    .from("time_off")
-    .select("id, meta_repeat, provider_id")
-    .eq("id", editingEvent.id)
-    .maybeSingle();
+    // ---------- 🟥 TIME-OFF ----------
+    if (isTimeOff) {
+      // 1️⃣ Identify if part of repeating group
+      const { data: match, error: matchErr } = await supabase
+        .from("time_off")
+        .select("id, meta_repeat, provider_id")
+        .eq("id", editingEvent.id)
+        .maybeSingle();
 
-  if (matchErr) throw matchErr;
-  const groupId = match?.meta_repeat?.group_id ?? null;
+      if (matchErr) throw matchErr;
+      const groupId = match?.meta_repeat?.group_id ?? null;
 
-  // 2️⃣ Delete record(s)
-  if (groupId && pendingGroupId === groupId) {
-    await supabase
-      .from("time_off")
-      .delete()
-      .eq("provider_id", providerId)
-      .eq("meta_repeat->>group_id", groupId);
-    console.log("🗑️ Deleted entire repeating series", groupId);
-  } else {
-    await supabase
-      .from("time_off")
-      .delete()
-      .eq("id", editingEvent.id)
-      .eq("provider_id", providerId);
-    console.log("🗑️ Deleted single time-off block");
-  }
+      // 2️⃣ Delete record(s)
+      if (groupId && pendingGroupId === groupId) {
+        await supabase
+          .from("time_off")
+          .delete()
+          .eq("provider_id", providerId)
+          .eq("meta_repeat->>group_id", groupId);
+        console.log("🗑️ Deleted entire repeating series", groupId);
+      } else {
+        await supabase
+          .from("time_off")
+          .delete()
+          .eq("id", editingEvent.id)
+          .eq("provider_id", providerId);
+        console.log("🗑️ Deleted single time-off block");
+      }
 
-  // 3️⃣ Clear React + FullCalendar state to prevent ghost blocks
-  setEvents([]); // reset React state immediately
-  if (calendarRef.current) {
-    const api = calendarRef.current.getApi();
-    api.removeAllEvents(); // drop all from calendar memory
-    console.log("🧹 Cleared all events before reload");
-  }
+      // 3️⃣ Clear and reload the calendar
+      setEvents([]);
+      if (calendarRef.current) {
+        const api = calendarRef.current.getApi();
+        api.removeAllEvents();
+      }
 
-  // 4️⃣ Reload directly from DB to verify
-  const { data: refreshedOffs, error: reloadErr } = await supabase
-    .from("time_off")
-    .select("id, start_time, end_time, reason")
-    .eq("provider_id", providerId);
+      const { data: refreshedOffs, error: reloadErr } = await supabase
+        .from("time_off")
+        .select("id, start_time, end_time, reason")
+        .eq("provider_id", providerId);
 
-  if (reloadErr) {
-    console.error("❌ Failed to reload time_off:", reloadErr.message);
-  } else {
-    const mappedOffs = refreshedOffs.map((o) => ({
-      id: o.id,
-      title: o.reason || "Closed",
-      start: o.start_time,
-      end: o.end_time,
-      backgroundColor: "#fca5a5",
-      borderColor: "#fca5a5",
-      textColor: "#fff",
-      extendedProps: { status: "time_off", source: "time_off" },
-    }));
-    setEvents(mappedOffs); // replace React events
-    if (calendarRef.current) {
-      const api = calendarRef.current.getApi();
-      mappedOffs.forEach((e) => api.addEvent(e)); // re-add to UI
+      if (!reloadErr && refreshedOffs) {
+        const mappedOffs = refreshedOffs.map((o) => ({
+          id: o.id,
+          title: o.reason || "Closed",
+          start: o.start_time,
+          end: o.end_time,
+          backgroundColor: "#fca5a5",
+          borderColor: "#fca5a5",
+          textColor: "#fff",
+          extendedProps: { status: "time_off", source: "time_off" },
+        }));
+        setEvents(mappedOffs);
+        if (calendarRef.current) {
+          const api = calendarRef.current.getApi();
+          mappedOffs.forEach((e) => api.addEvent(e));
+        }
+      }
+
+      // 4️⃣ Reset modal/UI
+      resetForm();
+      setModalOpen(false);
+      setEditingEvent(null);
+      setPendingGroupId(null);
+      setSeriesDeleteOpen(false);
+
+      console.log("✅ Time-off deleted and calendar fully refreshed");
+      return;
     }
-  }
 
-  // 5️⃣ Reset modal/UI
-  resetForm();
-  setModalOpen(false);
-  setEditingEvent(null);
-  setPendingGroupId(null);
-  setSeriesDeleteOpen(false);
-
-  console.log("✅ Time-off deleted and calendar fully refreshed");
-  return;
-}
-
-
-    // ---------- APPOINTMENT ----------
+    // ---------- 🟦 APPOINTMENT ----------
     const { data: appt, error: fetchErr } = await supabase
       .from("appointments")
       .select(
@@ -743,20 +796,19 @@ if (isTimeOff) {
 
     console.log("🗑️ Deleted appointment");
 
-  // 🔄 Refresh UI
-  await supabase.from("time_off").delete().eq("id", editingEvent.id); // make sure deletion actually fires
-  await loadEvents(); // reload fresh events from Supabase
+    // 🔄 Refresh UI
+    await loadEvents();
 
-  // 🧹 Reset modal + local state
-  resetForm();
-  setModalOpen(false);
-  setEditingEvent(null);
-  setPendingGroupId(null);
-  setSeriesDeleteOpen(false);
+    // 🧹 Reset modal + local state
+    resetForm();
+    setModalOpen(false);
+    setEditingEvent(null);
+    setPendingGroupId(null);
+    setSeriesDeleteOpen(false);
 
-  console.log("✅ Time-off deleted and calendar state refreshed");
+    console.log("✅ Appointment deleted and calendar state refreshed");
 
-    // ✉️ Only send cancellation emails for real patient appointments
+    // ✉️ Send cancellation email only for patient appointments
     let patient: any = null;
 
     if (appt?.patients) {
@@ -777,7 +829,8 @@ if (isTimeOff) {
   }
 };
 
-  
+
+
   // 🧩 Patch: freeze FullCalendar's scrollbar compensation once mounted
   useEffect(() => {
     if (!calendarRef.current) return;
@@ -814,11 +867,141 @@ if (isTimeOff) {
           plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
           initialView={currentView}
           timeZone="local"
-          headerToolbar={{
-            left: "prev,next today",
-            center: "title",
-            right: "dayGridMonth,timeGridWeek,timeGridDay",
+          eventTimeFormat={{
+            hour: "numeric",
+            minute: "2-digit",
+            hour12: true,
           }}
+          
+          customButtons={{
+            viewDropdown: {
+              text: "View ⌄",
+              click: function (e) {
+                const menuId = "fc-view-dropdown-menu";
+                let menu = document.getElementById(menuId);
+
+                // 🧹 Close if already open
+                if (menu) {
+                  menu.remove();
+                  document.removeEventListener("click", handleOutsideClick);
+                  document.removeEventListener("scroll", handleScroll, true);
+                  return;
+                }
+
+                // 🧱 Create dropdown container
+                menu = document.createElement("div");
+                menu.id = menuId;
+                menu.style.position = "absolute";
+                menu.style.background = "rgba(255, 255, 255, 0.9)";
+                menu.style.border = "1px solid #d1d5db";
+                menu.style.borderRadius = "12px";
+                menu.style.boxShadow = "0 4px 16px rgba(0,0,0,0.15)";
+                menu.style.padding = "6px 0";
+                menu.style.zIndex = "9999";
+                menu.style.fontSize = "0.9rem";
+                menu.style.minWidth = "150px";
+                menu.style.touchAction = "manipulation";
+                // @ts-ignore – Safari-only property not in TypeScript DOM typings
+                menu.style.webkitTapHighlightColor = "transparent";
+                menu.style.backdropFilter = "blur(6px)";
+                // @ts-ignore – Safari-only property not in TypeScript DOM typings
+                menu.style.webkitBackdropFilter = "blur(6px)";
+                menu.style.overflow = "hidden";
+
+                const views = [
+                  { key: "dayGridMonth", label: "Month" },
+                  { key: "timeGridWeek", label: "Week" },
+                  { key: "timeGridDay", label: "Day" },
+                ];
+
+                const currentView = calendarRef.current?.getApi()?.view?.type;
+
+                views.forEach((v, i) => {
+                  const item = document.createElement("div");
+                  item.textContent = v.label;
+                  item.style.padding = "10px 16px";
+                  item.style.cursor = "pointer";
+                  item.style.userSelect = "none";
+                  item.style.fontWeight = v.key === currentView ? "600" : "500";
+                  item.style.color = v.key === currentView ? "#111827" : "#374151";
+                  item.style.background = v.key === currentView ? "#f3f4f6" : "transparent";
+
+                  // Round top and bottom corners for the first and last items
+                  if (i === 0) item.style.borderTopLeftRadius = item.style.borderTopRightRadius = "12px";
+                  if (i === views.length - 1)
+                    item.style.borderBottomLeftRadius = item.style.borderBottomRightRadius = "12px";
+
+                  // 🪄 Hover effect
+                  item.addEventListener("mouseover", () => {
+                    if (v.key !== currentView) item.style.background = "#f9fafb";
+                  });
+                  item.addEventListener("mouseout", () => {
+                    if (v.key !== currentView) item.style.background = "transparent";
+                  });
+
+                  item.addEventListener("click", () => {
+                    calendarRef.current?.getApi()?.changeView(v.key);
+                    closeMenu();
+                  });
+
+                  menu.appendChild(item);
+                });
+
+                // 📍 Position below button — auto-adjust if near right edge
+                const rect = (e.target as HTMLElement).getBoundingClientRect();
+                const menuWidth = 150; // adjust if you ever change menu width
+                const screenWidth = window.innerWidth;
+
+                let left = rect.left;
+                if (left + menuWidth > screenWidth - 8) {
+                  left = screenWidth - menuWidth - 8; // shift left to avoid cutoff
+                }
+
+                menu.style.left = `${left}px`;
+                menu.style.top = `${rect.bottom + window.scrollY + 6}px`;
+
+                document.body.appendChild(menu);
+
+                // 🚪 Close menu logic
+                function closeMenu() {
+                  menu?.remove();
+                  document.removeEventListener("click", handleOutsideClick);
+                  document.removeEventListener("scroll", handleScroll, true);
+                }
+
+                function handleOutsideClick(ev: MouseEvent) {
+                  if (!menu?.contains(ev.target as Node)) closeMenu();
+                }
+
+                function handleScroll() {
+                  closeMenu();
+                }
+
+                // 🧩 Register event listeners
+                setTimeout(() => {
+                  document.addEventListener("click", handleOutsideClick);
+                  document.addEventListener("scroll", handleScroll, true);
+                }, 50);
+              },
+            },
+          }}
+
+    
+          headerToolbar={
+            window.innerWidth < 640
+              ? {
+                  left: "prev,next",
+                  center: "title",
+                  right: "today viewDropdown", // 👈 new compact mobile dropdown
+                }
+              : {
+                  left: "prev,next today",
+                  center: "title",
+                  right: "dayGridMonth,timeGridWeek,timeGridDay",
+                }
+          }
+
+
           slotMinTime="08:00:00"
           slotMaxTime="20:00:00"
           height="auto"

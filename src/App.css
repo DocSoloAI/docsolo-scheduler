@@ -40,3 +40,47 @@
 .read-the-docs {
   color: #888;
 }
+@media (max-width: 640px) {
+  .fc-toolbar.fc-header-toolbar {
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 0.25rem;
+  }
+
+  .fc-toolbar-title {
+    font-size: 0.9rem;
+  }
+
+  .fc-button-group,
+  .fc-button {
+    font-size: 0.75rem;
+    padding: 0.2rem 0.4rem;
+  }
+
+  .fc-toolbar-chunk {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+  }
+}
+/* 🌙 Smooth dropdown animation and polish */
+@keyframes dropdownFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+#fc-view-dropdown-menu {
+  animation: dropdownFadeIn 0.15s ease-out forwards;
+  backdrop-filter: blur(6px);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+#fc-view-dropdown-menu div {
+  transition: background 0.15s ease;
+}
