@@ -1045,7 +1045,7 @@ if (loading) return <div className="p-4 text-gray-500">Loading calendar…</div>
           titleFormat={{ year: "numeric", month: "short", day: "numeric" }}
 
           viewDidMount={() => {
-            // Wait for FullCalendar to fully render its toolbar before moving things
+            // Delay until after FC renders its header
             requestAnimationFrame(() => {
               const toolbar = document.querySelector(".fc-header-toolbar");
               if (!toolbar) return;
@@ -1053,7 +1053,7 @@ if (loading) return <div className="p-4 text-gray-500">Loading calendar…</div>
               const titleEl = toolbar.querySelector(".fc-toolbar-title");
               if (!titleEl) return;
 
-              // ✅ Create wrapper above toolbar if missing
+              // ✅ Only create wrapper if it doesn't already exist
               let titleWrapper = document.querySelector(".calendar-title-row");
               if (!titleWrapper) {
                 titleWrapper = document.createElement("div");
@@ -1061,11 +1061,13 @@ if (loading) return <div className="p-4 text-gray-500">Loading calendar…</div>
                 toolbar.parentElement?.insertBefore(titleWrapper, toolbar);
               }
 
-              // ✅ Move title element into wrapper
-              titleWrapper.innerHTML = "";
-              titleWrapper.appendChild(titleEl);
+              // ✅ Prevent double-append by checking current parent
+              if (titleEl.parentElement !== titleWrapper) {
+                titleWrapper.innerHTML = "";
+                titleWrapper.appendChild(titleEl);
+              }
 
-              // ✅ Style wrapper (ensures alignment + spacing)
+              // ✅ Style wrapper (applies once)
               const tw = titleWrapper as HTMLElement;
               tw.style.textAlign = "center";
               tw.style.width = "100%";
@@ -1073,16 +1075,17 @@ if (loading) return <div className="p-4 text-gray-500">Loading calendar…</div>
               tw.style.fontWeight = "500";
               tw.style.marginBottom = "0.4rem";
 
-              // ✅ Restore toolbar layout and mark ready (unhide)
+              // ✅ Restore toolbar layout if not already applied
               const tb = toolbar as HTMLElement;
-              tb.style.display = "flex";
-              tb.style.flexDirection = "row";
-              tb.style.justifyContent = "space-between";
-              tb.style.alignItems = "center";
-              tb.classList.add("fc-toolbar-ready"); // unhide toolbar now that it's ready
+              if (!tb.classList.contains("fc-toolbar-ready")) {
+                tb.style.display = "flex";
+                tb.style.flexDirection = "row";
+                tb.style.justifyContent = "space-between";
+                tb.style.alignItems = "center";
+                tb.classList.add("fc-toolbar-ready");
+              }
             });
           }}
-
 
 
           slotMinTime="08:00:00"
