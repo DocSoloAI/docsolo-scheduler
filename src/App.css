@@ -44,43 +44,50 @@
 }
 
 /* =======================================
-   ✅ Final FullCalendar Header Styling
+   ✅ FullCalendar — Final Locked Layout
    ======================================= */
+
 .fc-header-toolbar {
   display: flex !important;
-  flex-direction: row !important;
-  justify-content: space-between !important;
+  flex-direction: column !important;
   align-items: center !important;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
-  padding-bottom: 0.4rem;
-  margin-bottom: 0.6rem;
-  transition: opacity 0.05s linear;
-  opacity: 0; /* 🟡 Start invisible instead of hidden (no layout jump) */
-}
-
-.fc-header-toolbar.fc-toolbar-ready {
-  opacity: 1; /* ✅ Fade in smoothly when ready */
-}
-
-.calendar-title-row {
-  text-align: center;
-  font-size: 1.05rem;
-  font-weight: 500;
-  margin-bottom: 0.4rem;
+  text-align: center !important;
+  gap: 0.4rem !important;
+  margin-bottom: 0.5rem !important;
 }
 
 .fc-toolbar-title {
-  margin: 0 !important;
+  display: block !important;
+  width: 100% !important;
+  text-align: center !important;
+  font-size: 1rem !important;
+  font-weight: 600 !important;
+  margin-bottom: 0.3rem !important;
+}
+
+.fc-toolbar-chunk {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  width: 100% !important;
+}
+
+/* ✅ Center toolbar alignment fix */
+.fc-toolbar.fc-header-toolbar {
+  justify-content: center !important;
 }
 
 .fc-button {
   font-size: 0.8rem !important;
-  padding: 0.3rem 0.6rem !important;
+  padding: 0.35rem 0.6rem !important;
   border-radius: 6px !important;
+  text-transform: capitalize !important;
 }
 
-/* 🧩 Hide header instantly until layout is ready */
-.fc-header-toolbar:not(.fc-toolbar-ready) {
-  opacity: 0 !important;
-  pointer-events: none;
+@media (max-width: 640px) {
+  .fc-toolbar-chunk {
+    justify-content: center !important;
+    flex-wrap: wrap !important;
+    gap: 0.4rem !important;
+  }
 }

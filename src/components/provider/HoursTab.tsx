@@ -84,6 +84,29 @@ interface HoursTabProps {
 }
 
 // ---------------- helpers ----------------
+// 🕓 Convert a local time string like "09:00" or "18:30" to UTC-normalized "HH:mm:ss"
+function toUTC(localTime: string): string {
+  if (!localTime) return localTime;
+  const [h, m] = localTime.split(":").map(Number);
+  const d = new Date();
+  d.setHours(h, m, 0, 0);
+  const utcH = String(d.getUTCHours()).padStart(2, "0");
+  const utcM = String(d.getUTCMinutes()).padStart(2, "0");
+  return `${utcH}:${utcM}:00`;
+}
+
+// 🕓 Convert stored UTC time ("13:00:00") → local "09:00"
+function fromUTC(utcTime: string): string {
+  if (!utcTime) return "";
+  const [h, m] = utcTime.split(":").map(Number);
+  const d = new Date();
+  d.setUTCHours(h, m, 0, 0);
+  const localH = String(d.getHours()).padStart(2, "0");
+  const localM = String(d.getMinutes()).padStart(2, "0");
+  return `${localH}:${localM}`;
+}
+
+
 function nthWeekdayOfMonth(year: number, month: number, weekday: number, n: number): Date {
   let d = new Date(year, month, 1);
   let count = 0;
@@ -285,8 +308,8 @@ useEffect(() => {
       if (ctxHours && Array.isArray(ctxHours)) {
         normalizedHours = ctxHours.map((h: any) => ({
           ...h,
-          start_time: h.start_time?.slice(0, 5) ?? "",
-          end_time: h.end_time?.slice(0, 5) ?? "",
+          start_time: fromUTC(h.start_time?.slice(0, 5) ?? ""),
+          end_time: fromUTC(h.end_time?.slice(0, 5) ?? ""),
         }));
         setHours(normalizedHours);
       }
@@ -434,12 +457,16 @@ const saveHours = async () => {
     const currentIds = new Set(hours.filter((h) => h.id).map((h) => h.id));
     const idsToDelete = [...existingIds].filter((id) => !currentIds.has(id));
 
+    // ✅ Normalize all start/end times to UTC before saving
     const prepared = hours.map((h) => ({
       ...h,
       id: h.id ?? generateId(),
       provider_id: providerId,
-      slot_interval: h.slot_interval ?? 30, // ✅ new field
+      slot_interval: h.slot_interval ?? 30,
+      start_time: toUTC(h.start_time),
+      end_time: toUTC(h.end_time),
     }));
+
 
     const { error: upsertError } = await supabase
       .from("availability")

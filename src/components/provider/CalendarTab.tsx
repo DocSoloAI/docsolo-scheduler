@@ -144,15 +144,28 @@ interface AppointmentEvent {
   backgroundColor?: string;
   extendedProps?: any;
 }
+// 🕓 Convert stored UTC time ("13:00:00") → local "09:00"
+function fromUTC(utcTime: string): string {
+  if (!utcTime) return "";
+  const [h, m] = utcTime.split(":").map(Number);
+  const d = new Date();
+  d.setUTCHours(h, m, 0, 0);
+  const localH = String(d.getHours()).padStart(2, "0");
+  const localM = String(d.getMinutes()).padStart(2, "0");
+  return `${localH}:${localM}`;
+}
 
 export default function CalendarTab({ providerId }: { providerId: string }) {
   const [currentView] = useState("timeGridWeek");
   const [timeOffMode, setTimeOffMode] = useState<"hours" | "day" | "range">(
     "hours"
   );
-  const [highlightDate] = useState<Date | null>(null);
 
-  const { services, patients, loading, reload } = useSettings();
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [highlightDate, setHighlightDate] = useState<Date | null>(null);
+
+  const { services, patients, loading, reload, availability } = useSettings();
+  console.log("🕓 Provider availability from context:", availability);
   const [isDirty, setIsDirty] = useState(false);
   const [showDiscardDialog, setShowDiscardDialog] = useState(false);
 
@@ -163,6 +176,46 @@ export default function CalendarTab({ providerId }: { providerId: string }) {
     console.log("🔄 safeReload called (view state =", currentView, ")");
     await reload();
   };
+
+  // 🕓 derive earliest & latest hours from provider availability — convert UTC→local first
+  const [minTime, maxTime] = (() => {
+    if (!availability || availability.length === 0)
+      return ["08:00:00", "18:00:00"];
+
+    // Use only active hours (field name might be "is_active" not "enabled")
+    const active = availability.filter((d: any) => d.is_active ?? d.enabled);
+    if (active.length === 0) return ["08:00:00", "18:00:00"];
+
+    // Convert stored UTC times → local clock times
+    const startTimes = active.map((d: any) => fromUTC(d.start_time));
+    const endTimes = active.map((d: any) => fromUTC(d.end_time));
+
+    // Convert to minutes for math
+    const toMinutes = (t: string) => {
+      const [h, m] = t.split(":").map(Number);
+      return h * 60 + m;
+    };
+
+    const earliest = Math.min(...startTimes.map(toMinutes));
+    const latest = Math.max(...endTimes.map(toMinutes));
+
+    const buffer = 60; // add one-hour padding each side
+    const startBuffered = Math.max(0, earliest - buffer);
+    const endBuffered = Math.min(24 * 60, latest + buffer);
+
+    const toTimeString = (mins: number) => {
+      const h = Math.floor(mins / 60);
+      const m = mins % 60;
+      return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:00`;
+    };
+
+    const min = toTimeString(startBuffered);
+    const max = toTimeString(endBuffered);
+
+    console.log("🕓 Calendar range:", { min, max });
+    return [min, max];
+  })();
+
 
   const [events, setEvents] = useState<AppointmentEvent[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
@@ -307,7 +360,7 @@ const tryGoto = () => {
       // ---------- Load Time-Off ----------
       const { data: offs, error: offError } = await supabase
         .from("time_off")
-        .select("id, start_time, end_time, reason, meta_repeat")
+        .select("id, start_time, end_time, reason, meta_repeat, all_day")
         .eq("provider_id", providerId);
 
       if (offError) throw new Error(offError.message);
@@ -332,7 +385,7 @@ const tryGoto = () => {
             title: isHoliday ? "Office Closed" : o.reason || "Closed",
             start: isHoliday ? o.start_time : startFixed.toISOString(),
             end: isHoliday ? o.end_time : endFixed.toISOString(),
-            allDay: true, // ✅ always render time_off as full-day blocks
+            allDay: !!o.all_day, // ✅ use stored flag
             backgroundColor: "#fca5a5",
             borderColor: "#fca5a5",
             textColor: "#fff",
@@ -342,6 +395,7 @@ const tryGoto = () => {
               meta_repeat: o.meta_repeat || null,
             },
           };
+
         }) ?? [];
 
 
@@ -419,7 +473,8 @@ const tryGoto = () => {
 
   const handleDateClick = (info: any) => {
     setEditingEvent(null);
-    setIsTimeOff(false); // ✅ default to appointment mode
+    setIsTimeOff(false);
+    setTimeOffMode("day"); // ✅ default to full day if clicked on day cell
 
     const start = new Date(info.date);
     const end = new Date(start.getTime() + 30 * 60000);
@@ -432,7 +487,8 @@ const tryGoto = () => {
 
   const handleSelect = (info: any) => {
     setEditingEvent(null);
-    setIsTimeOff(false); // ✅ default to appointment mode
+    setIsTimeOff(false);
+    setTimeOffMode("hours"); // ✅ default to partial-day if selecting hours
 
     const start = new Date(info.start);
     const end = new Date(info.end);
@@ -604,16 +660,23 @@ const tryGoto = () => {
     // 🧩 3. CREATE single appointment or time off
     if (isTimeOff) {
       // ---------- CREATE SINGLE TIME OFF ----------
-      const { error: offErr } = await supabase
-        .from("time_off")
-        .insert([
-          {
-            provider_id: providerId,
-            start_time: start.toISOString(),
-            end_time: end.toISOString(),
-            reason: timeOffReason || "Time Off",
-          },
-        ]);
+      // ✅ Automatically detect if this is a full-day block (00:00–23:59)
+      const isFullDay =
+        start.getHours() === 0 &&
+        start.getMinutes() === 0 &&
+        end.getHours() === 23 &&
+        end.getMinutes() === 59;
+
+      // ✅ Save to Supabase with explicit all_day flag
+      const { error: offErr } = await supabase.from("time_off").insert([
+        {
+          provider_id: providerId,
+          start_time: start.toISOString(),
+          end_time: end.toISOString(),
+          reason: timeOffReason || "Time Off",
+          all_day: isFullDay, // <— new field for full vs partial
+        },
+      ]);
 
       setSaving(false);
       if (offErr) {
@@ -621,44 +684,41 @@ const tryGoto = () => {
         return;
       }
 
-
       await loadEvents(); // refresh calendar immediately
       resetForm();
       return;
-    } else {
+    } // ✅ <-- This closing brace was missing!
 
-      // ---------- CREATE SINGLE APPOINTMENT ----------
-      const insertData: any = {
-        provider_id: providerId,
-        start_time: start.toISOString(),
-        end_time: end.toISOString(),
-        status: "booked",
-        patient_id: selectedPatient,
-        service_id: selectedService,
-      };
+    // ---------- CREATE SINGLE APPOINTMENT ----------
+    const insertData: any = {
+      provider_id: providerId,
+      start_time: start.toISOString(),
+      end_time: end.toISOString(),
+      status: "booked",
+      patient_id: selectedPatient,
+      service_id: selectedService,
+    };
 
-      const { data: newAppt, error } = await supabase
-        .from("appointments")
-        .insert(insertData)
-        .select(
-          "id, start_time, status, patients(first_name,last_name,email), services(name)"
-        )
-        .single();
+    const { data: newAppt, error } = await supabase
+      .from("appointments")
+      .insert(insertData)
+      .select(
+        "id, start_time, status, patients(first_name,last_name,email), services(name)"
+      )
+      .single();
 
-      setSaving(false);
-      if (error) {
-        toast.error(`Error saving appointment: ${error.message}`);
-        return;
-      }
+    setSaving(false);
+    if (error) {
+      toast.error(`Error saving appointment: ${error.message}`);
+      return;
+    }
 
+    await new Promise((r) => setTimeout(r, 200));
+    await loadEvents(); // second reload after context rehydrates
+    resetForm();
 
-      await new Promise((r) => setTimeout(r, 200));
-      await loadEvents(); // second reload after context rehydrates
-      resetForm();
-
-      if (newAppt) {
-        await sendDualEmail("confirmation", providerId, newAppt);
-      }
+    if (newAppt) {
+      await sendDualEmail("confirmation", providerId, newAppt);
     }
   };
 
@@ -858,51 +918,6 @@ useEffect(() => {
   console.log("🧩 FullCalendar updateSize patched");
 }, []);
 
-// ✅ Force custom date range title above buttons
-useEffect(() => {
-  const calendarRoot = document.querySelector(".fc");
-  if (!calendarRoot) return;
-
-  const injectTitle = () => {
-    const toolbar = calendarRoot.querySelector(".fc-header-toolbar");
-    const titleEl = calendarRoot.querySelector(".fc-toolbar-title");
-    if (!toolbar || !titleEl) return;
-
-    // Remove duplicates
-    calendarRoot.querySelectorAll(".custom-calendar-title").forEach(el => el.remove());
-
-    // Create and insert our title above toolbar
-    const customTitle = document.createElement("div");
-    customTitle.className = "custom-calendar-title";
-    customTitle.textContent = titleEl.textContent || "";
-    toolbar.parentElement?.insertBefore(customTitle, toolbar);
-
-    // Sync when title text changes
-    const observer = new MutationObserver(() => {
-      const newText = titleEl.textContent || "";
-      if (customTitle.textContent !== newText) {
-        customTitle.textContent = newText;
-      }
-    });
-    observer.observe(titleEl, { childList: true, subtree: true });
-
-    return observer;
-  };
-
-  // Inject once after calendar loads
-  const observer = injectTitle();
-
-  // Watch for toolbar re-renders and re-inject
-  const rerenderWatcher = new MutationObserver(() => injectTitle());
-  rerenderWatcher.observe(calendarRoot, { childList: true, subtree: true });
-
-  return () => {
-    observer?.disconnect?.();
-    rerenderWatcher.disconnect();
-  };
-}, []);
-
-
 
 // 🟩 keep the conditional after all hooks
 if (loading) return <div className="p-4 text-gray-500">Loading calendar…</div>;
@@ -910,8 +925,44 @@ if (loading) return <div className="p-4 text-gray-500">Loading calendar…</div>
   return (
     <div className="p-2">
       <div className="calendar-wrapper relative w-full overflow-hidden">
+        <style>
+        {`
+          .fc-header-toolbar {
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: center !important;
+            text-align: center !important;
+            gap: 0.3rem !important;
+          }
+
+          .fc-toolbar-title {
+            display: block !important;
+            width: 100% !important;
+            text-align: center !important;
+            font-size: 1rem !important;
+            font-weight: 600 !important;
+            margin-bottom: 0.3rem !important;
+            order: -1 !important;
+          }
+
+          .fc-toolbar-chunk {
+            display: flex !important;
+            justify-content: space-between !important;
+            align-items: center !important;
+            width: 100% !important;
+          }
+
+          @media (max-width: 640px) {
+            .fc-toolbar-chunk {
+              justify-content: center !important;
+              flex-wrap: wrap !important;
+              gap: 0.4rem !important;
+            }
+          }
+        `}
+        </style>
+
         <FullCalendar
-          key={events.map((e) => e.id).join(",")}
           ref={calendarRef}
           plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
           initialView={currentView}
@@ -921,15 +972,38 @@ if (loading) return <div className="p-4 text-gray-500">Loading calendar…</div>
             minute: "2-digit",
             hour12: true,
           }}
-          
+          height="auto"
+          fixedWeekCount
+          showNonCurrentDates
+          slotMinTime={minTime}
+          slotMaxTime={maxTime}
+          scrollTime={minTime}
+
+          selectable
+          editable
+          events={events}
+          select={handleSelect}
+          dateClick={handleDateClick}
+          eventClick={handleEventClick}
+          eventDrop={handleEventDrop}
+          eventContent={renderEventContent}
+          handleWindowResize={false}
+          titleFormat={{ year: "numeric", month: "short", day: "numeric" }}
+
+          /* ✅ Single, elegant toolbar */
+          headerToolbar={{
+            start: "title",
+            center: "prev,next,today viewDropdown",
+            end: "",
+          }}
+
           customButtons={{
             viewDropdown: {
-              text: "View ⌄",
+              text: "View",
               click: function (e) {
                 const menuId = "fc-view-dropdown-menu";
                 let menu = document.getElementById(menuId);
 
-                // 🧹 Close if already open
                 if (menu) {
                   menu.remove();
                   document.removeEventListener("click", handleOutsideClick);
@@ -937,7 +1011,6 @@ if (loading) return <div className="p-4 text-gray-500">Loading calendar…</div>
                   return;
                 }
 
-                // 🧱 Create dropdown container
                 menu = document.createElement("div");
                 menu.id = menuId;
                 menu.style.position = "absolute";
@@ -950,10 +1023,10 @@ if (loading) return <div className="p-4 text-gray-500">Loading calendar…</div>
                 menu.style.fontSize = "0.9rem";
                 menu.style.minWidth = "150px";
                 menu.style.touchAction = "manipulation";
-                // @ts-ignore – Safari-only property not in TypeScript DOM typings
+                // @ts-ignore
                 menu.style.webkitTapHighlightColor = "transparent";
                 menu.style.backdropFilter = "blur(6px)";
-                // @ts-ignore – Safari-only property not in TypeScript DOM typings
+                // @ts-ignore
                 menu.style.webkitBackdropFilter = "blur(6px)";
                 menu.style.overflow = "hidden";
 
@@ -962,7 +1035,6 @@ if (loading) return <div className="p-4 text-gray-500">Loading calendar…</div>
                   { key: "timeGridWeek", label: "Week" },
                   { key: "timeGridDay", label: "Day" },
                 ];
-
                 const currentView = calendarRef.current?.getApi()?.view?.type;
 
                 views.forEach((v, i) => {
@@ -972,15 +1044,20 @@ if (loading) return <div className="p-4 text-gray-500">Loading calendar…</div>
                   item.style.cursor = "pointer";
                   item.style.userSelect = "none";
                   item.style.fontWeight = v.key === currentView ? "600" : "500";
-                  item.style.color = v.key === currentView ? "#111827" : "#374151";
-                  item.style.background = v.key === currentView ? "#f3f4f6" : "transparent";
+                  item.style.color =
+                    v.key === currentView ? "#111827" : "#374151";
+                  item.style.background =
+                    v.key === currentView ? "#f3f4f6" : "transparent";
 
-                  // Round top and bottom corners for the first and last items
-                  if (i === 0) item.style.borderTopLeftRadius = item.style.borderTopRightRadius = "12px";
+                  if (i === 0)
+                    item.style.borderTopLeftRadius =
+                      item.style.borderTopRightRadius =
+                        "12px";
                   if (i === views.length - 1)
-                    item.style.borderBottomLeftRadius = item.style.borderBottomRightRadius = "12px";
+                    item.style.borderBottomLeftRadius =
+                      item.style.borderBottomRightRadius =
+                        "12px";
 
-                  // 🪄 Hover effect
                   item.addEventListener("mouseover", () => {
                     if (v.key !== currentView) item.style.background = "#f9fafb";
                   });
@@ -996,37 +1073,30 @@ if (loading) return <div className="p-4 text-gray-500">Loading calendar…</div>
                   menu.appendChild(item);
                 });
 
-                // 📍 Position below button — auto-adjust if near right edge
                 const rect = (e.target as HTMLElement).getBoundingClientRect();
-                const menuWidth = 150; // adjust if you ever change menu width
+                const menuWidth = 150;
                 const screenWidth = window.innerWidth;
 
                 let left = rect.left;
-                if (left + menuWidth > screenWidth - 8) {
-                  left = screenWidth - menuWidth - 8; // shift left to avoid cutoff
-                }
+                if (left + menuWidth > screenWidth - 8)
+                  left = screenWidth - menuWidth - 8;
 
                 menu.style.left = `${left}px`;
                 menu.style.top = `${rect.bottom + window.scrollY + 6}px`;
-
                 document.body.appendChild(menu);
 
-                // 🚪 Close menu logic
                 function closeMenu() {
                   menu?.remove();
                   document.removeEventListener("click", handleOutsideClick);
                   document.removeEventListener("scroll", handleScroll, true);
                 }
-
                 function handleOutsideClick(ev: MouseEvent) {
                   if (!menu?.contains(ev.target as Node)) closeMenu();
                 }
-
                 function handleScroll() {
                   closeMenu();
                 }
 
-                // 🧩 Register event listeners
                 setTimeout(() => {
                   document.addEventListener("click", handleOutsideClick);
                   document.addEventListener("scroll", handleScroll, true);
@@ -1035,96 +1105,15 @@ if (loading) return <div className="p-4 text-gray-500">Loading calendar…</div>
             },
           }}
 
-          headerToolbar={{
-            left: "prev,next today",
-            center: "title",
-            right: "viewDropdown",
-          }}
-
-
-          titleFormat={{ year: "numeric", month: "short", day: "numeric" }}
-
-          viewDidMount={() => {
-            // ✅ Prevent multiple executions
-            if ((window as any).__calendarHeaderInit) return;
-            (window as any).__calendarHeaderInit = true;
-
-            requestAnimationFrame(() => {
-              const toolbar = document.querySelector(".fc-header-toolbar");
-              if (!toolbar) return;
-
-              const titleEl = toolbar.querySelector(".fc-toolbar-title");
-              if (!titleEl) return;
-
-              // ✅ Create wrapper if missing
-              let titleWrapper = document.querySelector(".calendar-title-row");
-              if (!titleWrapper) {
-                titleWrapper = document.createElement("div");
-                titleWrapper.className = "calendar-title-row";
-                toolbar.parentElement?.insertBefore(titleWrapper, toolbar);
-              }
-
-              // ✅ Move title into wrapper if not already there
-              if (titleEl.parentElement !== titleWrapper) {
-                titleWrapper.innerHTML = "";
-                titleWrapper.appendChild(titleEl);
-              }
-
-              // ✅ Style the wrapper
-              const tw = titleWrapper as HTMLElement;
-              tw.style.textAlign = "center";
-              tw.style.width = "100%";
-              tw.style.fontSize = "1rem";
-              tw.style.fontWeight = "500";
-              tw.style.marginBottom = "0.4rem";
-
-              // ✅ Restore toolbar layout if not already ready
-              const tb = toolbar as HTMLElement;
-              if (!tb.classList.contains("fc-toolbar-ready")) {
-                tb.style.display = "flex";
-                tb.style.flexDirection = "row";
-                tb.style.justifyContent = "space-between";
-                tb.style.alignItems = "center";
-                tb.classList.add("fc-toolbar-ready");
-              }
-            });
-          }}
-
-
-
-          slotMinTime="08:00:00"
-          slotMaxTime="20:00:00"
-          height="auto"
-          fixedWeekCount={true}
-          showNonCurrentDates={true}
-          hiddenDays={[]}
-          selectable
-          select={handleSelect}
-          editable
-          events={events}
-          dateClick={handleDateClick}
-          eventClick={handleEventClick}
-          eventDrop={handleEventDrop}
-          eventContent={renderEventContent}
-          eventDidMount={(info) => {
-            if (
-              highlightDate &&
-              info.event.start &&
-              new Date(info.event.start).toDateString() === highlightDate.toDateString() &&
-              info.event.extendedProps?.status !== "cancelled" // ✅ skip cancelled
-            ) {
-              const el = info.el;
-              el.classList.add("pulse-highlight");
-              setTimeout(() => el.classList.remove("pulse-highlight"), 1500);
-            }
-          }}
-
-          handleWindowResize={false}
-
+          /* ✅ Views and cell formatting */
           views={{
             dayGridMonth: { dayHeaderFormat: { weekday: "short" } },
-            timeGridWeek: { dayHeaderFormat: { weekday: "short", day: "numeric" } },
-            timeGridDay: { dayHeaderFormat: { weekday: "long", day: "numeric" } },
+            timeGridWeek: {
+              dayHeaderFormat: { weekday: "short", day: "numeric" },
+            },
+            timeGridDay: {
+              dayHeaderFormat: { weekday: "long", day: "numeric" },
+            },
           }}
           dayCellContent={(arg) => {
             if (arg.view.type === "dayGridMonth") {
@@ -1134,39 +1123,29 @@ if (loading) return <div className="p-4 text-gray-500">Loading calendar…</div>
                 return eventDate === arg.date.toDateString();
               });
 
+              const bookedCount = dayEvents.filter(
+                (e) => e.extendedProps?.status === "booked"
+              ).length;
+              const hasClosure = dayEvents.some(
+                (e) => e.extendedProps?.status === "time_off"
+              );
 
-            const bookedCount = dayEvents.filter(
-              (e) => e.extendedProps?.status === "booked"
-            ).length;
+              return (
+                <div className="flex flex-col items-center">
+                  <span className="text-xs font-medium">{arg.date.getDate()}</span>
+                  {bookedCount > 0 && (
+                    <div className="inline-block px-1 mt-0.5 text-[10px] rounded-full bg-green-600 text-white">
+                      {bookedCount}
+                    </div>
+                  )}
+                  {hasClosure && <div className="mt-0.5 text-red-500 text-sm">🚫</div>}
+                </div>
+              );
+            }
+            return arg.dayNumberText;
+          }}
+        />
 
-            const hasClosure = dayEvents.some(
-              (e) => e.extendedProps?.status === "time_off"
-            );
-
-            return (
-              <div className="flex flex-col items-center">
-                {/* Always show date number */}
-                <span className="text-xs font-medium">{arg.date.getDate()}</span>
-
-                {/* If booked appts, show badge */}
-                {bookedCount > 0 && (
-                  <div className="inline-block px-1 mt-0.5 text-[10px] rounded-full bg-green-600 text-white">
-                    {bookedCount}
-                  </div>
-                )}
-
-                {/* If closed, show 🚫 */}
-                {hasClosure && (
-                  <div className="mt-0.5 text-red-500 text-sm">🚫</div>
-                )}
-              </div>
-            );
-          }
-
-          // ✅ For week/day views, let FullCalendar handle defaults
-          return arg.dayNumberText;
-        }}
-      />
 
       {/* Appointment Modal */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
@@ -1794,3 +1773,4 @@ if (loading) return <div className="p-4 text-gray-500">Loading calendar…</div>
   </div>   
   );
 }
+
