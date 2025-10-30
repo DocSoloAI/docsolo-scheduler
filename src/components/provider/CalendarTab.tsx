@@ -11,6 +11,8 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import rrulePlugin from "@fullcalendar/rrule";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -138,12 +140,16 @@ async function sendDualEmail(
 
 interface AppointmentEvent {
   id: string;
-  title: string;
+  title?: string; // ✅ optional for background/availability events
   start: string;
   end: string;
+  display?: string;
   backgroundColor?: string;
+  borderColor?: string;
+  textColor?: string;
   extendedProps?: any;
 }
+
 // 🕓 Convert stored UTC time ("13:00:00") → local "09:00"
 function fromUTC(utcTime: string): string {
   if (!utcTime) return "";
@@ -156,6 +162,9 @@ function fromUTC(utcTime: string): string {
 }
 
 export default function CalendarTab({ providerId }: { providerId: string }) {
+  const { availability: ctxHours } = useSettings();
+console.log("🧩 CalendarTab ctxHours on mount:", ctxHours);
+
   const [currentView] = useState("timeGridWeek");
   const [timeOffMode, setTimeOffMode] = useState<"hours" | "day" | "range">(
     "hours"
@@ -239,6 +248,8 @@ export default function CalendarTab({ providerId }: { providerId: string }) {
   const [selectedService, setSelectedService] = useState<string | null>(null);
   const [duration, setDuration] = useState<number>(30);
   const [isTimeOff, setIsTimeOff] = useState(false);
+  const [isAvailability, setIsAvailability] = useState(false);
+
   const [saving, setSaving] = useState(false);
   const [seriesDeleteOpen, setSeriesDeleteOpen] = useState(false);
   const [pendingGroupId, setPendingGroupId] = useState<string | null>(null);
@@ -299,6 +310,37 @@ const tryGoto = () => {
   };
 }, []);
 
+// 🩵 Load provider one-off availability overrides (read-only background)
+async function loadAvailabilityOverrides() {
+  const { data, error } = await supabase
+    .from("availability_overrides")
+    .select("id, start_time, end_time, is_active")
+    .eq("provider_id", providerId);
+
+  if (error) {
+    console.error("❌ Error loading availability overrides:", error.message);
+    return [];
+  }
+
+  // map rows → FullCalendar availability override events
+  const mapped = (data || [])
+    .filter((r) => r.is_active)
+    .map((r) => ({
+      id: `avail-${r.id}`,
+      start: r.start_time,
+      end: r.end_time,
+      display: "auto", // ✅ allow normal event behavior
+      interactive: true, // ✅ allow clicking for delete
+      backgroundColor: "#E0F7FA", // same light teal
+      borderColor: "#B2EBF2",
+      textColor: "#004D40",
+      extendedProps: { status: "availability_override" },
+    }));
+
+  console.log("🩵 Overrides loaded:", mapped.length);
+  return mapped;
+
+}
 
   // ✅ Resilient calendar loader that merges appointments + time off reliably
   const loadEvents = async () => {
@@ -396,19 +438,59 @@ const tryGoto = () => {
         }) ?? [];
 
 
-
       // ---------- Merge & Render ----------
-      const allEvents = [...mappedAppts, ...mappedOffs];
-      setEvents(allEvents);
+      const overrides = await loadAvailabilityOverrides();
 
-      if (calendarRef.current) {
-        const api = calendarRef.current.getApi();
-        api.removeAllEvents();
-        allEvents.forEach((e) => api.addEvent(e));
-      }
-      console.log("🧩 First few events:", allEvents.slice(0, 3));
+      // 🩵 Build background events from provider's base availability
+console.log("🔍 Raw ctxHours sample:", ctxHours.slice(0, 3));
 
-      console.log(`✅ Calendar reloaded: ${allEvents.length} total events`);
+      const baseAvailability = (ctxHours || [])
+        .filter((a: any) => a.is_active !== false)
+        .map((a: any) => {
+          const localStart = fromUTC(a.start_time);
+          const localEnd = fromUTC(a.end_time);
+          return {
+            id: `base-${a.day_of_week}-${a.start_time}`,
+            daysOfWeek: [a.day_of_week],
+            startTime: localStart,
+            endTime: localEnd,
+            display: "background",
+            backgroundColor: "#E0F7FA", // same as modal teal
+            borderColor: "transparent",
+            textColor: "transparent",
+            extendedProps: { status: "base_availability" },
+          };
+        });
+
+
+    console.log("🩵 Base availability preview:", baseAvailability);
+
+    // ✅ Merge all event types into one unified list
+    const allEvents = [
+      ...mappedAppts,
+      ...mappedOffs,
+      ...overrides,
+      ...baseAvailability,
+    ];
+
+    // 🧹 Clear existing events before adding the fresh list
+    // 🧹 Only render once ctxHours (base availability) is ready
+    if (calendarRef.current && (ctxHours?.length ?? 0) > 0) {
+      const api = calendarRef.current.getApi();
+
+      // Clear all events before re-adding
+      api.removeAllEvents();
+
+      // Add everything fresh
+      allEvents.forEach((e: any) => api.addEvent(e));
+    } else {
+      console.warn("⚠️ Skipping render — ctxHours not ready yet");
+    }
+
+
+    // ✅ Debug logs
+    console.log("🧩 First few events:", allEvents.slice(0, 3));
+    console.log(`✅ Calendar reloaded: ${allEvents.length} total events`);
     } catch (err: any) {
       console.error("❌ loadEvents failed:", err.message);
     }
@@ -416,7 +498,13 @@ const tryGoto = () => {
 
 
   useEffect(() => {
-    // 🧭 Initial load
+    // ⏳ Wait until provider hours (ctxHours) are loaded
+    if (!ctxHours || ctxHours.length === 0) {
+      console.log("🕓 Skipping loadEvents — ctxHours not ready yet");
+      return;
+    }
+
+    console.log("🚀 Running loadEvents with ctxHours count:", ctxHours.length);
     loadEvents();
 
     // 🪄 Subscribe to realtime updates for both appointments and time_off
@@ -454,7 +542,8 @@ const tryGoto = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [providerId]);
+  }, [providerId, ctxHours]);
+
 
 
 
@@ -496,11 +585,66 @@ const tryGoto = () => {
   };
 
 
-
-  const handleEventClick = (info: any) => {
+  const handleEventClick = async (info: any) => {
     const event = info.event;
-    const isOff = event.extendedProps.status === "time_off";
+    const status = event.extendedProps?.status;
 
+    // 🩵 Delete one-off availability blocks
+    if (status === "availability_override") {
+      info.jsEvent.preventDefault();
+      info.jsEvent.stopPropagation();
+
+      toast(
+        (t) => (
+          <div>
+            <p className="text-sm font-medium">Delete this availability block?</p>
+            <div className="flex justify-end gap-2 mt-3">
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={async () => {
+                  try {
+                    const id = event.id.replace("avail-", "");
+                    const { error } = await supabase
+                      .from("availability_overrides")
+                      .delete()
+                      .eq("id", id);
+
+                    if (error) throw error;
+
+                    await loadEvents();
+                    toast.dismiss(t.id);
+                    toast.success("Availability deleted");
+                  } catch (err: any) {
+                    console.error("❌ Error deleting availability:", err.message);
+                    toast.error("Error deleting availability.");
+                  }
+                }}
+              >
+                Delete
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => toast.dismiss(t.id)}
+              >
+                Undo
+              </Button>
+            </div>
+          </div>
+        ),
+        { duration: 5000 }
+      );
+
+      return;
+    }
+
+
+    // ignore true background blocks
+    if (event.display === "background") return;
+
+    // normal modal logic
+    const isOff = event.extendedProps.status === "time_off";
     setEditingEvent({
       id: event.id,
       start: event.startStr,
@@ -511,19 +655,18 @@ const tryGoto = () => {
       patient_note: event.extendedProps.patient_note || null,
     });
 
-
     setSelectedDate(event.startStr);
     setSelectedPatient(event.extendedProps.patient_id || null);
     setSelectedService(event.extendedProps.service_id || null);
     setDuration(
-      (new Date(event.endStr).getTime() - new Date(event.startStr).getTime()) /
-        60000
+      (new Date(event.endStr).getTime() - new Date(event.startStr).getTime()) / 60000
     );
 
     setIsTimeOff(isOff);
-    setIsTimeOff(isOff);
     setModalOpen(true);
   };
+
+
 
   const handleEventDrop = async (info: any) => {
     info.revert();
@@ -653,6 +796,37 @@ const tryGoto = () => {
       toast.success(`Added ${repeats.length} repeating time-off blocks ✅`);
       return;
       }
+
+    // 🟩 3A. CREATE single availability override
+    if (isAvailability) {
+      try {
+        const { error: availErr } = await supabase.from("availability_overrides").insert([
+          {
+            provider_id: providerId,
+            start_time: selectedDate.toISOString(),
+            end_time: endDate ? endDate.toISOString() : null,
+            note: "One-off availability",
+          },
+        ]);
+
+        setSaving(false);
+        if (availErr) {
+          toast.error(`Error saving availability: ${availErr.message}`);
+          return;
+        }
+
+        await loadEvents(); // ✅ refresh calendar to show teal block
+        resetForm();
+        toast.success("Added custom availability");
+        return;
+      } catch (err: any) {
+        console.error("❌ Error adding availability:", err);
+        toast.error("Error adding availability.");
+        setSaving(false);
+        return;
+      }
+    }
+
 
     // 🧩 3. CREATE single appointment or time off
     if (isTimeOff) {
@@ -961,7 +1135,7 @@ if (loading) return <div className="p-4 text-gray-500">Loading calendar…</div>
 
         <FullCalendar
           ref={calendarRef}
-          plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
+          plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin, rrulePlugin]}
           initialView={currentView}
           timeZone="local"
           eventTimeFormat={{
@@ -1112,6 +1286,16 @@ if (loading) return <div className="p-4 text-gray-500">Loading calendar…</div>
               dayHeaderFormat: { weekday: "long", day: "numeric" },
             },
           }}
+          
+          eventBackgroundColor="#E0F7FA"
+          eventDisplay="auto"
+          eventColor="#E0F7FA"
+          eventDidMount={(info) => {
+            if (info.event.display === "background") {
+              info.el.style.pointerEvents = "none";
+            }
+          }}
+
           dayCellContent={(arg) => {
             if (arg.view.type === "dayGridMonth") {
               const dayEvents = events.filter((e) => {
@@ -1141,6 +1325,7 @@ if (loading) return <div className="p-4 text-gray-500">Loading calendar…</div>
             }
             return arg.dayNumberText;
           }}
+          
         />
 
 
@@ -1176,25 +1361,30 @@ if (loading) return <div className="p-4 text-gray-500">Loading calendar…</div>
                   What would you like to add?
                 </p>
                 <div className="flex justify-center gap-3">
+                  {/* Appointment */}
                   <button
                     onClick={() => {
                       setIsTimeOff(false);
+                      setIsAvailability(false);
                       markDirty();
                     }}
-                    className={`flex-1 max-w-[160px] py-2.5 rounded-lg font-medium border transition-all duration-150 ${
-                      !isTimeOff
+                    className={`flex-1 max-w-[150px] py-2.5 rounded-lg font-medium border transition-all duration-150 ${
+                      !isTimeOff && !isAvailability
                         ? "bg-blue-600 text-white border-blue-600 shadow-sm"
                         : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
                     }`}
                   >
                     Appointment
                   </button>
+
+                  {/* Time Off */}
                   <button
                     onClick={() => {
                       setIsTimeOff(true);
+                      setIsAvailability(false);
                       markDirty();
                     }}
-                    className={`flex-1 max-w-[160px] py-2.5 rounded-lg font-medium border transition-all duration-150 ${
+                    className={`flex-1 max-w-[150px] py-2.5 rounded-lg font-medium border transition-all duration-150 ${
                       isTimeOff
                         ? "bg-red-500 text-white border-red-500 shadow-sm hover:bg-red-600"
                         : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
@@ -1202,13 +1392,86 @@ if (loading) return <div className="p-4 text-gray-500">Loading calendar…</div>
                   >
                     Time Off
                   </button>
+
+                  {/* Availability */}
+                  <button
+                    onClick={() => {
+                      setIsAvailability(true);
+                      setIsTimeOff(false);
+                      markDirty();
+                    }}
+                    className={`flex-1 max-w-[150px] py-2.5 rounded-lg font-medium border transition-all duration-150 ${
+                      isAvailability
+                        ? "bg-teal-500 text-white border-teal-500 shadow-sm hover:bg-teal-600"
+                        : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
+                    }`}
+                  >
+                    Availability
+                  </button>
                 </div>
+
               </div>
             )}
 
             {/* 🧩 Conditional forms */}
             <div className="animate-fadeIn transition-all duration-300">
-              {isTimeOff ? (
+              {isAvailability ? (
+                // 🟩 One-off Availability Form
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4 mt-3">
+                    <div>
+                      <Label>Start Time</Label>
+                      <Input
+                        type="time"
+                        value={
+                          selectedDate
+                            ? (() => {
+                                const d = new Date(selectedDate);
+                                return d.toTimeString().slice(0, 5);
+                              })()
+                            : ""
+                        }
+                        onChange={(e) => {
+                          const [hours, minutes] = e.target.value.split(":").map(Number);
+                          const updated = selectedDate ? new Date(selectedDate) : new Date();
+                          updated.setHours(hours, minutes, 0, 0);
+                          setSelectedDate(updated);
+                          setIsDirty(true);
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <Label>End Time</Label>
+                      <Input
+                        type="time"
+                        value={
+                          endDate
+                            ? (() => {
+                                const d = new Date(endDate);
+                                return d.toTimeString().slice(0, 5);
+                              })()
+                            : ""
+                        }
+                        onChange={(e) => {
+                          const [hours, minutes] = e.target.value.split(":").map(Number);
+                          const updated = endDate ? new Date(endDate) : new Date();
+                          updated.setHours(hours, minutes, 0, 0);
+                          setEndDate(updated);
+                          setIsDirty(true);
+                        }}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <Label>Note (optional)</Label>
+                    <Input
+                      type="text"
+                      placeholder="e.g., Staying late today"
+                      onChange={() => setIsDirty(true)}
+                    />
+                  </div>
+                </div>
+              ) : isTimeOff ? (
                 // 🕒 Time Off Form
                 <div className="space-y-4">
                   <div>
