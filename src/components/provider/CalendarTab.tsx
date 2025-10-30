@@ -161,9 +161,6 @@ export default function CalendarTab({ providerId }: { providerId: string }) {
     "hours"
   );
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [highlightDate, setHighlightDate] = useState<Date | null>(null);
-
   const { services, patients, loading, reload, availability } = useSettings();
   console.log("🕓 Provider availability from context:", availability);
   const [isDirty, setIsDirty] = useState(false);
