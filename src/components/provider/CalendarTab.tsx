@@ -237,7 +237,7 @@ console.log("🧩 CalendarTab ctxHours on mount:", ctxHours);
   const [repeatUnit, setRepeatUnit] = useState<"days" | "weeks">("weeks");
   const [repeatUntil, setRepeatUntil] = useState<string>("");
   const [timeOffReason, setTimeOffReason] = useState("");
-
+  const [providerTimezone, setProviderTimezone] = useState("America/New_York");
   const showConfirm = (message: string, action: () => void) => {
     setConfirmMessage(message);
     setConfirmAction(() => action);
@@ -254,6 +254,23 @@ console.log("🧩 CalendarTab ctxHours on mount:", ctxHours);
   const [seriesDeleteOpen, setSeriesDeleteOpen] = useState(false);
   const [pendingGroupId, setPendingGroupId] = useState<string | null>(null);
   const calendarRef = useRef<any>(null);
+
+useEffect(() => {
+  const loadProviderTimezone = async () => {
+    if (!providerId) return;
+    const { data, error } = await supabase
+      .from("providers")
+      .select("timezone")
+      .eq("id", providerId)
+      .single();
+    if (error) {
+      console.error("❌ Error loading provider timezone:", error.message);
+      return;
+    }
+    if (data?.timezone) setProviderTimezone(data.timezone);
+  };
+  loadProviderTimezone();
+}, [providerId]);
 
 useEffect(() => {
   const handleResize = () => {
@@ -1137,7 +1154,7 @@ if (loading) return <div className="p-4 text-gray-500">Loading calendar…</div>
           ref={calendarRef}
           plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin, rrulePlugin]}
           initialView={currentView}
-          timeZone="local"
+          timeZone={providerTimezone || "America/New_York"}
           eventTimeFormat={{
             hour: "numeric",
             minute: "2-digit",

@@ -91,11 +91,11 @@ export default function BookingPage() {
       const subdomain = getSubdomain();
       if (!subdomain) return;
 
-    const { data: provider, error } = await supabase
-      .from("providers")
-      .select("id, email, office_name, phone, street, city, state, zip, announcement, logo_url")
-      .eq("subdomain", subdomain)
-      .single();
+      const { data: provider, error } = await supabase
+        .from("providers")
+        .select("id, email, office_name, phone, street, city, state, zip, announcement, logo_url, timezone")
+        .eq("subdomain", subdomain)
+        .single();
 
       if (error || !provider) {
         console.error("Provider not found:", error);
@@ -116,6 +116,7 @@ export default function BookingPage() {
 
     loadProvider();
   }, []);
+
 
   const [patientType, setPatientType] = useState<"established" | "new" | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>();
@@ -207,19 +208,28 @@ export default function BookingPage() {
       let allSlots: { time: string; date: Date }[] = [];
 
       availRows.forEach((avail) => {
-        const start = new Date(selectedDate);
+        // Build local start and end times directly from provider hours
+        const localStart = new Date(selectedDate);
         const [sh, sm] = (avail.start_time as string).split(":").map(Number);
-        start.setHours(sh, sm, 0, 0);
+        localStart.setHours(sh, sm, 0, 0);
 
-        const end = new Date(selectedDate);
+        const localEnd = new Date(selectedDate);
         const [eh, em] = (avail.end_time as string).split(":").map(Number);
-        end.setHours(eh, em, 0, 0);
+        localEnd.setHours(eh, em, 0, 0);
 
         const step = avail.slot_interval || 30;
-        const cur = new Date(start);
+        const cur = new Date(localStart);
 
-        while (cur < end) {
-          allSlots.push({ time: format(cur, "h:mm a"), date: new Date(cur) });
+        const timeFormatter = new Intl.DateTimeFormat("en-US", {
+          hour: "numeric",
+          minute: "2-digit",
+        });
+
+        while (cur < localEnd) {
+          allSlots.push({
+            time: timeFormatter.format(cur),
+            date: new Date(cur),
+          });
           cur.setMinutes(cur.getMinutes() + step);
         }
       });
@@ -444,7 +454,8 @@ export default function BookingPage() {
       if (serviceError) throw serviceError;
       const durationMin = serviceData.duration_minutes;
 
-      const start = parse(selectedTime!, "h:mm a", selectedDate!);
+      const startLocal = parse(selectedTime!, "h:mm a", selectedDate!);
+      const start = new Date(startLocal);
       const end = new Date(start.getTime() + durationMin * 60000);
 
       let appointmentId: string | null = null;

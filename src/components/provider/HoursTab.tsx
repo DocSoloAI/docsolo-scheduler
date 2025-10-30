@@ -33,6 +33,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner"; // ⚡ Add at top of file if not already imported
+import { Label } from "@/components/ui/label";
 
 
 // ---------------- constants ----------------
@@ -175,6 +176,7 @@ export default function HoursTab({ providerId, onDirtyChange }: HoursTabProps) {
   const { availability: ctxHours, reload, loading } = useSettings();
   const [hours, setHours] = useState<Availability[]>([]);
   const [saving, setSaving] = useState(false);
+  const [providerTimezone, setProviderTimezone] = useState("America/New_York");
 
   const [holidaySelections, setHolidaySelections] = useState<string[]>([]);
   const [dirty, setDirty] = useState(false);
@@ -217,7 +219,22 @@ export default function HoursTab({ providerId, onDirtyChange }: HoursTabProps) {
     };
   }, [dirty]);
 
-
+  useEffect(() => {
+    const loadProviderTimezone = async () => {
+      if (!providerId) return;
+      const { data, error } = await supabase
+        .from("providers")
+        .select("timezone")
+        .eq("id", providerId)
+        .single();
+      if (error) {
+        console.error("❌ Error loading provider timezone:", error.message);
+        return;
+      }
+      if (data?.timezone) setProviderTimezone(data.timezone);
+    };
+    loadProviderTimezone();
+  }, [providerId]);
 
 // ---------------- dirty tracking ----------------
 
@@ -539,7 +556,6 @@ const saveHours = async () => {
     }
 
 
-
     // ✅ Step 4: Wrap up
     toast.success("Hours, slot intervals, and holiday closures saved successfully ✅");
     markDirty(false);
@@ -564,6 +580,54 @@ const saveHours = async () => {
   // ---------------- UI ----------------
   return (
     <div className="relative pb-32 space-y-6 max-w-3xl mx-auto">
+      {/* =======================================
+        🕓 Provider Timezone Selector
+        ======================================= */}
+      <div className="mb-6 border-b border-gray-200 pb-4">
+        <Label className="block text-sm font-medium text-gray-700 mb-1">
+          Time Zone
+        </Label>
+        <Select
+          value={providerTimezone}
+          onValueChange={async (val) => {
+            setProviderTimezone(val);
+            try {
+              const { error } = await supabase
+                .from("providers")
+                .update({ timezone: val })
+                .eq("id", providerId);
+              if (error) throw error;
+              console.log("✅ Timezone updated to:", val);
+              toast.success("Timezone updated to " + val);
+            } catch (err) {
+              console.error("❌ Error updating timezone:", err);
+              toast.error("Error updating timezone.");
+            }
+          }}
+        >
+          <SelectTrigger className="w-full md:w-80">
+            <SelectValue placeholder="Select your timezone" />
+          </SelectTrigger>
+            <SelectContent className="max-h-60 overflow-y-auto">
+              <SelectItem value="America/New_York">Eastern (ET)</SelectItem>
+              <SelectItem value="America/Chicago">Central (CT)</SelectItem>
+              <SelectItem value="America/Denver">Mountain (MT)</SelectItem>
+              <SelectItem value="America/Los_Angeles">Pacific (PT)</SelectItem>
+              <SelectItem value="America/Anchorage">Alaska (AKT)</SelectItem>
+              <SelectItem value="Pacific/Honolulu">Hawaii (HST)</SelectItem>
+              <SelectItem value="Canada/Atlantic">Atlantic (AT)</SelectItem>
+              <SelectItem value="America/Phoenix">Arizona (no DST)</SelectItem>
+              <SelectItem value="America/Toronto">Toronto (ET)</SelectItem>
+              <SelectItem value="America/Vancouver">Vancouver (PT)</SelectItem>
+              <SelectItem value="America/Mexico_City">Mexico City (CT)</SelectItem>
+              <SelectItem value="Europe/London">London (UK)</SelectItem>
+              <SelectItem value="Europe/Dublin">Dublin (Ireland)</SelectItem>
+              <SelectItem value="Europe/Paris">Paris (France)</SelectItem>
+              <SelectItem value="Australia/Sydney">Sydney (AU)</SelectItem>
+            </SelectContent>
+        </Select>
+      </div>
+
       {/* grid of day cards */}
       <div className="space-y-4">
         {days.map((day, dayIndex) => {
