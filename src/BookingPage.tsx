@@ -13,6 +13,7 @@ import { sendTemplatedEmail } from "@/lib/email/sendTemplatedEmail";
 import { useSettings } from "@/context/SettingsContext";
 import { upsertPatientAndCreateAppointment } from "@/lib/db";
 import { toast } from "react-hot-toast";
+import { fromUTCToTZ, fromTZToUTC, formatInTZ } from "@/utils/timezone";
 
 export default function BookingPage() {
   const { services } = useSettings();
@@ -112,7 +113,10 @@ export default function BookingPage() {
       setProviderCity(provider.city || "");
       setProviderState(provider.state || "");
       setProviderZip(provider.zip || "");
+
+      if (provider?.timezone) setProviderTimezone(provider.timezone);
     };
+    
 
     loadProvider();
   }, []);
@@ -146,6 +150,7 @@ export default function BookingPage() {
   const [allowText, setAllowText] = useState(true);
   const [formError, setFormError] = useState("");
   const [rescheduleLoaded, setRescheduleLoaded] = useState(false);
+  const [providerTimezone, setProviderTimezone] = useState("America/New_York");
 
   const [availableTimes, setAvailableTimes] = useState<string[]>([]);
 
@@ -208,39 +213,47 @@ export default function BookingPage() {
       let allSlots: { time: string; date: Date }[] = [];
 
       availRows.forEach((avail) => {
-        // Build local start and end times directly from provider hours
-        const localStart = new Date(selectedDate);
+        // Build provider-local start and end times
+        const startLocal = new Date(selectedDate);
         const [sh, sm] = (avail.start_time as string).split(":").map(Number);
-        localStart.setHours(sh, sm, 0, 0);
+        startLocal.setHours(sh, sm, 0, 0);
 
-        const localEnd = new Date(selectedDate);
+        const endLocal = new Date(selectedDate);
         const [eh, em] = (avail.end_time as string).split(":").map(Number);
-        localEnd.setHours(eh, em, 0, 0);
+        endLocal.setHours(eh, em, 0, 0);
+
+        // ✅ Convert provider-local → UTC for filtering
+        const startUTC = fromTZToUTC(startLocal, providerTimezone);
+        const endUTC = fromTZToUTC(endLocal, providerTimezone);
 
         const step = avail.slot_interval || 30;
-        const cur = new Date(localStart);
+        const cur = new Date(startUTC);
 
-        const timeFormatter = new Intl.DateTimeFormat("en-US", {
-          hour: "numeric",
-          minute: "2-digit",
-        });
-
-        while (cur < localEnd) {
+        while (cur < endUTC) {
+          // ✅ Convert UTC slot → provider-local display time
+          const localTime = fromUTCToTZ(cur, providerTimezone);
           allSlots.push({
-            time: timeFormatter.format(cur),
-            date: new Date(cur),
+            time: formatInTZ(localTime, providerTimezone, "h:mm a"),
+            date: new Date(localTime),
           });
           cur.setMinutes(cur.getMinutes() + step);
         }
       });
 
+
       allSlots.sort((a, b) => a.date.getTime() - b.date.getTime());
 
       const now = new Date();
-      const startOfDay = new Date(selectedDate);
-      startOfDay.setHours(0, 0, 0, 0);
-      const endOfDay = new Date(selectedDate);
-      endOfDay.setHours(23, 59, 59, 999);
+      // ✅ Convert the provider's day boundaries to UTC before querying Supabase
+      const startOfDayUTC = fromTZToUTC(
+        new Date(selectedDate.setHours(0, 0, 0, 0)),
+        providerTimezone
+      );
+      const endOfDayUTC = fromTZToUTC(
+        new Date(selectedDate.setHours(23, 59, 59, 999)),
+        providerTimezone
+      );
+
 
       // --- Fetch booked appts ---
       const { data: appts } = await supabase
@@ -248,16 +261,18 @@ export default function BookingPage() {
         .select("id, start_time, end_time, status")
         .eq("provider_id", providerId)
         .eq("status", "booked")
-        .gte("start_time", startOfDay.toISOString())
-        .lte("end_time", endOfDay.toISOString());
+        .gte("start_time", startOfDayUTC.toISOString())
+        .lte("end_time", endOfDayUTC.toISOString());
+
 
       // --- Fetch provider time_off (holidays, days off, etc.) ---
       const { data: offs } = await supabase
         .from("time_off")
         .select("start_time, end_time")
         .eq("provider_id", providerId)
-        .gte("start_time", startOfDay.toISOString())
-        .lte("end_time", endOfDay.toISOString());
+        .gte("start_time", startOfDayUTC.toISOString())
+        .lte("end_time", endOfDayUTC.toISOString());
+
 
       const bookedSlots = [
         ...(appts || []).filter((a) => !rescheduleId || a.id !== rescheduleId).map((a) => ({

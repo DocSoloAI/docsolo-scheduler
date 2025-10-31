@@ -39,6 +39,7 @@ import {
 } from "@/components/ui/command";
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { toast } from "react-hot-toast";
+import { fromUTCToTZ } from "@/utils/timezone";
 
 
 // === Email helper ===
@@ -150,20 +151,10 @@ interface AppointmentEvent {
   extendedProps?: any;
 }
 
-// 🕓 Convert stored UTC time ("13:00:00") → local "09:00"
-function fromUTC(utcTime: string): string {
-  if (!utcTime) return "";
-  const [h, m] = utcTime.split(":").map(Number);
-  const d = new Date();
-  d.setUTCHours(h, m, 0, 0);
-  const localH = String(d.getHours()).padStart(2, "0");
-  const localM = String(d.getMinutes()).padStart(2, "0");
-  return `${localH}:${localM}`;
-}
-
 export default function CalendarTab({ providerId }: { providerId: string }) {
   const { availability: ctxHours } = useSettings();
 console.log("🧩 CalendarTab ctxHours on mount:", ctxHours);
+  const [providerTimezone, setProviderTimezone] = useState("America/New_York");
 
   const [currentView] = useState("timeGridWeek");
   const [timeOffMode, setTimeOffMode] = useState<"hours" | "day" | "range">(
@@ -184,43 +175,36 @@ console.log("🧩 CalendarTab ctxHours on mount:", ctxHours);
   };
 
   // 🕓 derive earliest & latest hours from provider availability — convert UTC→local first
-  const [minTime, maxTime] = (() => {
-    if (!availability || availability.length === 0)
-      return ["08:00:00", "18:00:00"];
+  const [minTime, setMinTime] = useState("08:00:00");
+  const [maxTime, setMaxTime] = useState("18:00:00");
 
-    // Use only active hours (field name might be "is_active" not "enabled")
+  useEffect(() => {
+    if (!availability || availability.length === 0 || !providerTimezone) return;
+
     const active = availability.filter((d: any) => d.is_active ?? d.enabled);
-    if (active.length === 0) return ["08:00:00", "18:00:00"];
+    if (active.length === 0) return;
 
-    // Convert stored UTC times → local clock times
-    const startTimes = active.map((d: any) => fromUTC(d.start_time));
-    const endTimes = active.map((d: any) => fromUTC(d.end_time));
+    const startTimes = active.map((d: any) =>
+      fromUTCToTZ(`1970-01-01T${d.start_time}`, providerTimezone)
+    );
+    const endTimes = active.map((d: any) =>
+      fromUTCToTZ(`1970-01-01T${d.end_time}`, providerTimezone)
+    );
 
-    // Convert to minutes for math
-    const toMinutes = (t: string) => {
-      const [h, m] = t.split(":").map(Number);
-      return h * 60 + m;
-    };
-
+    const toMinutes = (d: Date) => d.getHours() * 60 + d.getMinutes();
     const earliest = Math.min(...startTimes.map(toMinutes));
     const latest = Math.max(...endTimes.map(toMinutes));
+    const buffer = 60;
 
-    const buffer = 60; // add one-hour padding each side
-    const startBuffered = Math.max(0, earliest - buffer);
-    const endBuffered = Math.min(24 * 60, latest + buffer);
+    const toTimeString = (mins: number) =>
+      `${String(Math.floor(mins / 60)).padStart(2, "0")}:${String(
+        mins % 60
+      ).padStart(2, "0")}:00`;
 
-    const toTimeString = (mins: number) => {
-      const h = Math.floor(mins / 60);
-      const m = mins % 60;
-      return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:00`;
-    };
+    setMinTime(toTimeString(Math.max(0, earliest - buffer)));
+    setMaxTime(toTimeString(Math.min(24 * 60, latest + buffer)));
+  }, [availability, providerTimezone]);
 
-    const min = toTimeString(startBuffered);
-    const max = toTimeString(endBuffered);
-
-    console.log("🕓 Calendar range:", { min, max });
-    return [min, max];
-  })();
 
 
   const [events, setEvents] = useState<AppointmentEvent[]>([]);
@@ -237,7 +221,6 @@ console.log("🧩 CalendarTab ctxHours on mount:", ctxHours);
   const [repeatUnit, setRepeatUnit] = useState<"days" | "weeks">("weeks");
   const [repeatUntil, setRepeatUntil] = useState<string>("");
   const [timeOffReason, setTimeOffReason] = useState("");
-  const [providerTimezone, setProviderTimezone] = useState("America/New_York");
   const showConfirm = (message: string, action: () => void) => {
     setConfirmMessage(message);
     setConfirmAction(() => action);
@@ -386,10 +369,8 @@ async function loadAvailabilityOverrides() {
             appt.status === "time_off" ? "#fca5a5" : serviceColor;
 
           // 🕐 Convert UTC → Local properly
-          const startLocal = new Date(appt.start_time);
-          const endLocal = new Date(appt.end_time);
-          const startFixed = new Date(startLocal.getTime() - startLocal.getTimezoneOffset() * 60000);
-          const endFixed = new Date(endLocal.getTime() - endLocal.getTimezoneOffset() * 60000);
+          const startFixed = fromUTCToTZ(appt.start_time, providerTimezone);
+          const endFixed = fromUTCToTZ(appt.end_time, providerTimezone);
 
           return {
             id: appt.id,
@@ -423,25 +404,16 @@ async function loadAvailabilityOverrides() {
 
       const mappedOffs =
         offs?.map((o) => {
-          const startLocal = new Date(o.start_time);
-          const endLocal = new Date(o.end_time);
-
-          // 🕐 Convert UTC → Local only for non-holiday events
-          const startFixed = new Date(
-            startLocal.getTime() - startLocal.getTimezoneOffset() * 60000
-          );
-          const endFixed = new Date(
-            endLocal.getTime() - endLocal.getTimezoneOffset() * 60000
-          );
-
           const isHoliday = o.reason?.startsWith("holiday:");
+          const startFixed = fromUTCToTZ(o.start_time, providerTimezone);
+          const endFixed = fromUTCToTZ(o.end_time, providerTimezone);
 
           return {
             id: o.id,
             title: isHoliday ? "Office Closed" : o.reason || "Closed",
             start: isHoliday ? o.start_time : startFixed.toISOString(),
             end: isHoliday ? o.end_time : endFixed.toISOString(),
-            allDay: !!o.all_day, // ✅ use stored flag
+            allDay: !!o.all_day,
             backgroundColor: "#fca5a5",
             borderColor: "#fca5a5",
             textColor: "#fff",
@@ -451,8 +423,8 @@ async function loadAvailabilityOverrides() {
               meta_repeat: o.meta_repeat || null,
             },
           };
-
         }) ?? [];
+
 
 
       // ---------- Merge & Render ----------
@@ -464,8 +436,14 @@ console.log("🔍 Raw ctxHours sample:", ctxHours.slice(0, 3));
       const baseAvailability = (ctxHours || [])
         .filter((a: any) => a.is_active !== false)
         .map((a: any) => {
-          const localStart = fromUTC(a.start_time);
-          const localEnd = fromUTC(a.end_time);
+          const localStart = fromUTCToTZ(`1970-01-01T${a.start_time}`, providerTimezone)
+            .toTimeString()
+            .slice(0, 5);
+
+          const localEnd = fromUTCToTZ(`1970-01-01T${a.end_time}`, providerTimezone)
+            .toTimeString()
+            .slice(0, 5);
+
           return {
             id: `base-${a.day_of_week}-${a.start_time}`,
             daysOfWeek: [a.day_of_week],
@@ -579,8 +557,9 @@ console.log("🔍 Raw ctxHours sample:", ctxHours.slice(0, 3));
     setIsTimeOff(false);
     setTimeOffMode("day"); // ✅ default to full day if clicked on day cell
 
-    const start = new Date(info.date);
+    const start = fromUTCToTZ(info.date, providerTimezone);
     const end = new Date(start.getTime() + 30 * 60000);
+
     setSelectedDate(start);
     setEndDate(end);
 
@@ -593,8 +572,9 @@ console.log("🔍 Raw ctxHours sample:", ctxHours.slice(0, 3));
     setIsTimeOff(false);
     setTimeOffMode("hours"); // ✅ default to partial-day if selecting hours
 
-    const start = new Date(info.start);
-    const end = new Date(info.end);
+    const start = fromUTCToTZ(info.start, providerTimezone);
+    const end = fromUTCToTZ(info.end, providerTimezone);
+
     setSelectedDate(start);
     setEndDate(end);
 
