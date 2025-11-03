@@ -404,12 +404,10 @@ async function loadAvailabilityOverrides() {
             let end: Date;
 
             if (o.off_date && o.all_day) {
-              // 🟩 Build synthetic start/end for full-day offs
-              const d = new Date(o.off_date);
-              start = new Date(d);
-              start.setHours(0, 0, 0, 0);
-              end = new Date(d);
-              end.setHours(23, 59, 59, 999);
+              // 🟩 Use local midnight explicitly to avoid UTC date shift
+              const [year, month, day] = o.off_date.split("-").map(Number);
+              start = new Date(year, month - 1, day, 0, 0, 0, 0);   // local start
+              end = new Date(year, month - 1, day, 23, 59, 59, 999); // local end
             } else {
               // 🟦 Partial-day time off
               start = new Date(o.start_time);
