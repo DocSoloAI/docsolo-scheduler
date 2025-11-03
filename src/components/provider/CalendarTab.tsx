@@ -388,54 +388,51 @@ async function loadAvailabilityOverrides() {
           };
         }) ?? [];
 
+        // ---------- Load Time-Off ----------
+        const { data: offs, error: offError } = await supabase
+          .from("time_off")
+          .select("id, start_time, end_time, off_date, reason, meta_repeat, all_day")
+          .eq("provider_id", providerId);
 
+        if (offError) throw new Error(offError.message);
 
-      // ---------- Load Time-Off ----------
-      const { data: offs, error: offError } = await supabase
-        .from("time_off")
-        .select("id, start_time, end_time, reason, meta_repeat, all_day")
-        .eq("provider_id", providerId);
+        // ✅ Normalize and include off_date-based records
+        const mappedOffs =
+          (offs || []).map((o) => {
+            const isHoliday = o.reason?.startsWith("holiday:");
+            let start: Date;
+            let end: Date;
 
-      if (offError) throw new Error(offError.message);
+            if (o.off_date && o.all_day) {
+              // 🟩 Build synthetic start/end for full-day offs
+              const d = new Date(o.off_date);
+              start = new Date(d);
+              start.setHours(0, 0, 0, 0);
+              end = new Date(d);
+              end.setHours(23, 59, 59, 999);
+            } else {
+              // 🟦 Partial-day time off
+              start = new Date(o.start_time);
+              end = new Date(o.end_time);
+            }
 
-      const mappedOffs =
-        (offs || []).map((o) => {
-          const isHoliday = o.reason?.startsWith("holiday:");
-          const startFixed = new Date(o.start_time);
-          const endFixed = new Date(o.end_time);
-
-          // ✅ If it's an all-day block, render as a full background closure
-          if (o.all_day) {
             return {
               id: o.id,
-              title: "OFF",
-              start: startFixed,
-              end: endFixed,
-              allDay: false, // ✅ force it into the hourly grid
-              display: "auto", // ✅ make it interactive
+              title: isHoliday ? "Office Closed" : o.reason || "OFF",
+              start,
+              end,
+              allDay: !!o.all_day,
+              display: "auto",
               backgroundColor: "#fca5a5",
               borderColor: "#f87171",
               textColor: "#fff",
-              extendedProps: { source: "time_off", status: "time_off" },
+              extendedProps: {
+                source: "time_off",
+                status: "time_off",
+                meta_repeat: o.meta_repeat || null,
+              },
             };
-          }
-
-
-          // ⏰ Otherwise, partial-day time off block
-          return {
-            id: o.id,
-            title: isHoliday ? "Office Closed" : o.reason || "Closed",
-            start: startFixed,
-            end: endFixed,
-            allDay: false,
-            backgroundColor: "#fca5a5",
-            borderColor: "#fca5a5",
-            textColor: "#fff",
-            extendedProps: { source: "time_off", status: "time_off", meta_repeat: o.meta_repeat || null },
-          };
-        });
-
-
+          }) ?? [];
 
 
       // ---------- Merge & Render ----------
