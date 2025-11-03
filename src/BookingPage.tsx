@@ -304,20 +304,30 @@ export default function BookingPage() {
         };
       });
 
-      // 🟥 If any full-day off overlaps the selected date (local), clear all availability
+      // 🟥 Detect full-day offs correctly in provider's local timezone
       const hasFullDayOff = (offs || []).some((o) => {
         if (!o.all_day) return false;
-        const offDate = new Date(o.start_time);
-        return offDate.toDateString() === selectedDate.toDateString();
+
+        // Convert both the off day and the selected day to local provider time
+        const offStartLocal = fromUTCToTZ(new Date(o.start_time), providerTimezone);
+        const offEndLocal = fromUTCToTZ(new Date(o.end_time), providerTimezone);
+        const selectedLocal = fromUTCToTZ(new Date(selectedDate), providerTimezone);
+
+        // ✅ Compare only by date portion (ignoring time)
+        return (
+          selectedLocal.toDateString() === offStartLocal.toDateString() ||
+          (selectedLocal >= offStartLocal && selectedLocal <= offEndLocal)
+        );
       });
 
+      // 🟥 If office closed for full day → friendly message + stop
       if (hasFullDayOff) {
+        console.log("🚫 Full-day OFF detected for", selectedDate.toDateString());
         setAvailableTimes([
           "No appointments available. Either the office is closed, or fully booked.",
         ]);
         return;
       }
-
 
       // ✅ Combine appts + offs
       const bookedSlots = [
