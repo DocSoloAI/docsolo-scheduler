@@ -402,28 +402,31 @@ async function loadAvailabilityOverrides() {
             const isHoliday = o.reason?.startsWith("holiday:");
             let start: Date;
             let end: Date;
+            let isFullDay = false;
 
             if (o.off_date && o.all_day) {
               // 🟩 Use local midnight explicitly to avoid UTC date shift
               const [year, month, day] = o.off_date.split("-").map(Number);
-              start = new Date(year, month - 1, day, 0, 0, 0, 0);   // local start
-              end = new Date(year, month - 1, day, 23, 59, 59, 999); // local end
+              start = new Date(year, month - 1, day, 0, 0, 0, 0);
+              end = new Date(year, month - 1, day, 23, 59, 59, 999);
+              isFullDay = true;
             } else {
               // 🟦 Partial-day time off
               start = new Date(o.start_time);
               end = new Date(o.end_time);
             }
 
+            // ✅ If full-day, make it clickable but still visually span entire day
             return {
               id: o.id,
-              title: isHoliday ? "Office Closed" : o.reason || "OFF",
+              title: isFullDay ? "OFF" : isHoliday ? "Office Closed" : o.reason || "OFF",
               start,
               end,
               allDay: !!o.all_day,
-              display: "auto",
-              backgroundColor: "#fca5a5",
+              display: "auto", // ✅ keeps event clickable/editable
+              backgroundColor: isFullDay ? "#fecaca" : "#fca5a5", // lighter red for full day
               borderColor: "#f87171",
-              textColor: "#fff",
+              textColor: isFullDay ? "#7f1d1d" : "#fff",
               extendedProps: {
                 source: "time_off",
                 status: "time_off",

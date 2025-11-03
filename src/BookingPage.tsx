@@ -302,18 +302,23 @@ export default function BookingPage() {
 
     // ✅ Detect full-day off (supports both off_date and time-based rows)
     const hasFullDayOff = (offs || []).some((o) => {
-      if (!o.all_day) return false;
+      if (!o || !o.all_day) return false;
 
-      // ✅ Support new off_date or fallback to start_time
-      const offDay =
-        o.off_date ||
-        (o.start_time ? o.start_time.slice(0, 10) : null);
+      // ✅ Safely determine which date to compare
+      let offDay: string | null = null;
+
+      if (o.off_date) {
+        offDay = o.off_date;
+      } else if (o.start_time && typeof o.start_time === "string") {
+        offDay = o.start_time.slice(0, 10);
+      }
 
       if (!offDay) return false;
 
       const selectedDay = selectedDate.toISOString().slice(0, 10);
       return selectedDay === offDay;
     });
+
 
     if (hasFullDayOff) {
       console.log("🚫 Full-day OFF detected for", selectedDate.toDateString());
