@@ -308,19 +308,20 @@ export default function BookingPage() {
       const hasFullDayOff = (offs || []).some((o) => {
         if (!o.all_day) return false;
 
-        // Convert both the off day and the selected day to local provider time
-        const offStartLocal = fromUTCToTZ(new Date(o.start_time), providerTimezone);
-        const offEndLocal = fromUTCToTZ(new Date(o.end_time), providerTimezone);
+        // 🕓 Supabase stores UTC — convert properly into provider's local timezone
+        const offStartLocal = fromUTCToTZ(new Date(o.start_time + "Z"), providerTimezone);
+        const offEndLocal = fromUTCToTZ(new Date(o.end_time + "Z"), providerTimezone);
         const selectedLocal = fromUTCToTZ(new Date(selectedDate), providerTimezone);
 
-        // ✅ Compare only by date portion (ignoring time)
-        return (
-          selectedLocal.toDateString() === offStartLocal.toDateString() ||
-          (selectedLocal >= offStartLocal && selectedLocal <= offEndLocal)
-        );
+        // 🧩 Build YYYY-MM-DD strings for safe comparison
+        const offStartStr = offStartLocal.toISOString().split("T")[0];
+        const offEndStr = offEndLocal.toISOString().split("T")[0];
+        const selectedStr = selectedLocal.toISOString().split("T")[0];
+
+        // ✅ True if the selected local date falls within the off-day range
+        return selectedStr >= offStartStr && selectedStr <= offEndStr;
       });
 
-      // 🟥 If office closed for full day → friendly message + stop
       if (hasFullDayOff) {
         console.log("🚫 Full-day OFF detected for", selectedDate.toDateString());
         setAvailableTimes([
@@ -328,6 +329,7 @@ export default function BookingPage() {
         ]);
         return;
       }
+
 
       // ✅ Combine appts + offs
       const bookedSlots = [
