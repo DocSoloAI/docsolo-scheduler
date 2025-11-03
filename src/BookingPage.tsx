@@ -263,13 +263,17 @@ export default function BookingPage() {
         .gte("start_time", startOfDayUTC.toISOString())
         .lte("end_time", endOfDayUTC.toISOString());
 
-      // --- Fetch provider time_off (with all_day flag) ---
-      const { data: offs } = await supabase
-        .from("time_off")
-        .select("start_time, end_time, all_day, reason")
-        .eq("provider_id", providerId)
-        .gte("start_time", startOfDayUTC.toISOString())
-        .lte("end_time", endOfDayUTC.toISOString());
+        // --- Fetch provider time_off (with all_day flag) ---
+        // 🧩 Include any time_off overlapping the selected day (not just fully inside)
+        const { data: offs } = await supabase
+          .from("time_off")
+          .select("start_time, end_time, all_day, reason")
+          .eq("provider_id", providerId)
+          .or(
+            `
+              and(start_time.lte.${endOfDayUTC.toISOString()},end_time.gte.${startOfDayUTC.toISOString()})
+            `
+          );
 
       // ✅ Normalize time_off — expand all_day blocks safely
       const mappedOffs = (offs || []).map((o) => {
