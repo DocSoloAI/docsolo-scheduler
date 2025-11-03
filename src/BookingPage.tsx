@@ -304,22 +304,33 @@ export default function BookingPage() {
         };
       });
 
-      // 🟥 Detect full-day offs correctly in provider's local timezone
+      // 🟥 Detect full-day offs correctly — stable UTC comparison
       const hasFullDayOff = (offs || []).some((o) => {
         if (!o.all_day) return false;
 
-        // 🕓 Supabase stores UTC — convert properly into provider's local timezone
-        const offStartLocal = fromUTCToTZ(new Date(o.start_time + "Z"), providerTimezone);
-        const offEndLocal = fromUTCToTZ(new Date(o.end_time + "Z"), providerTimezone);
-        const selectedLocal = fromUTCToTZ(new Date(selectedDate), providerTimezone);
+        // Force UTC interpretation for database times
+        const offStart = new Date(o.start_time + "Z");
+        const offEnd = new Date(o.end_time + "Z");
 
-        // 🧩 Build YYYY-MM-DD strings for safe comparison
-        const offStartStr = offStartLocal.toISOString().split("T")[0];
-        const offEndStr = offEndLocal.toISOString().split("T")[0];
-        const selectedStr = selectedLocal.toISOString().split("T")[0];
+        // Normalize everything to midnight UTC
+        const selectedUTC = new Date(Date.UTC(
+          selectedDate.getUTCFullYear(),
+          selectedDate.getUTCMonth(),
+          selectedDate.getUTCDate()
+        ));
+        const offStartUTC = new Date(Date.UTC(
+          offStart.getUTCFullYear(),
+          offStart.getUTCMonth(),
+          offStart.getUTCDate()
+        ));
+        const offEndUTC = new Date(Date.UTC(
+          offEnd.getUTCFullYear(),
+          offEnd.getUTCMonth(),
+          offEnd.getUTCDate()
+        ));
 
-        // ✅ True if the selected local date falls within the off-day range
-        return selectedStr >= offStartStr && selectedStr <= offEndStr;
+        // ✅ True if selected day falls within the off-day range (pure date-level compare)
+        return selectedUTC >= offStartUTC && selectedUTC <= offEndUTC;
       });
 
       if (hasFullDayOff) {
@@ -329,6 +340,7 @@ export default function BookingPage() {
         ]);
         return;
       }
+
 
 
       // ✅ Combine appts + offs
