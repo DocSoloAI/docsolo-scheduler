@@ -266,15 +266,19 @@ export default function BookingPage() {
 
       if (!isActive) return;
 
-      // --- Fetch time_off (then filter by exact date match) ---
+      // --- Fetch time_off (with off_date support) ---
       const { data: rawOffs, error: offErr } = await supabase
         .from("time_off")
-        .select("start_time, end_time, all_day, reason")
-        .eq("provider_id", providerId);
+        .select("start_time, end_time, all_day, reason, off_date") // ✅ include off_date
+        .eq("provider_id", providerId)
+        .or(
+          `and(start_time.lte.${endOfDayUTC.toISOString()},end_time.gte.${startOfDayUTC.toISOString()})`
+        );
 
       if (offErr) {
         console.error("❌ time_off fetch error:", offErr);
       }
+
 
       // ✅ Keep only rows that match the selected date (by YYYY-MM-DD)
       const selectedDayString = new Date(
@@ -296,22 +300,36 @@ export default function BookingPage() {
 
       if (!isActive) return;
 
-      // ✅ Detect full-day off
-      const hasFullDayOff = (offs || []).some((o) => o.all_day);
-      if (hasFullDayOff) {
-        console.log("🚫 Full-day OFF detected for", selectedDate.toDateString());
-        setAvailableTimes([
-          "No appointments available. Either the office is closed, or fully booked.",
-        ]);
-        return;
-      }
+    // ✅ Detect full-day off (supports both off_date and time-based rows)
+    const hasFullDayOff = (offs || []).some((o) => {
+      if (!o.all_day) return false;
 
-      // ✅ Normalize time_off for partial-day logic
-      const mappedOffs = (offs || []).map((o) => {
-        const start = new Date(o.start_time);
-        const end = new Date(o.end_time);
-        return { start, end, all_day: !!o.all_day };
-      });
+      // ✅ Support new off_date or fallback to start_time
+      const offDay =
+        o.off_date ||
+        (o.start_time ? o.start_time.slice(0, 10) : null);
+
+      if (!offDay) return false;
+
+      const selectedDay = selectedDate.toISOString().slice(0, 10);
+      return selectedDay === offDay;
+    });
+
+    if (hasFullDayOff) {
+      console.log("🚫 Full-day OFF detected for", selectedDate.toDateString());
+      setAvailableTimes([
+        "No appointments available. Either the office is closed, or fully booked.",
+      ]);
+      return;
+    }
+
+    // ✅ Normalize time_off for partial-day logic
+    const mappedOffs = (offs || []).map((o) => {
+      const start = o.start_time ? new Date(o.start_time) : null;
+      const end = o.end_time ? new Date(o.end_time) : null;
+      return { start, end, all_day: !!o.all_day };
+    });
+
 
       // ✅ Combine appointments + time_off
       const bookedSlots = [
@@ -329,11 +347,17 @@ export default function BookingPage() {
       const freeSlots = allSlots
         .filter((slot) => {
           return !bookedSlots.some((b) => {
-            const sameDay = b.all_day && b.start.toDateString() === slot.date.toDateString();
-            const overlaps = slot.date >= b.start && slot.date < b.end;
+            // ✅ Guard against null start/end
+            const sameDay =
+              b.all_day &&
+              b.start &&
+              b.start.toDateString() === slot.date.toDateString();
+            const overlaps =
+              b.start && b.end && slot.date >= b.start && slot.date < b.end;
             return sameDay || overlaps;
           });
         })
+
         .filter((slot) => {
           if (selectedDate.toDateString() !== now.toDateString()) return true;
           return slot.date > now;
