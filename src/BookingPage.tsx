@@ -304,44 +304,35 @@ export default function BookingPage() {
         };
       });
 
-      // 🟥 Detect full-day offs correctly and show clear debug output
+      // 🟥 Detect full-day offs using raw UTC date strings only (no local conversion)
       const hasFullDayOff = (offs || []).some((o) => {
         if (!o.all_day) return false;
 
-        // 1️⃣ Force UTC parsing of Supabase datetimes
-        const offStartUTC = new Date(o.start_time + "Z");
-        const offEndUTC = new Date(o.end_time + "Z");
+        // Supabase gives "YYYY-MM-DD hh:mm:ss"
+        const offStartDay = o.start_time.slice(0, 10); // e.g. "2025-11-06"
+        const offEndDay   = o.end_time.slice(0, 10);
 
-        // 2️⃣ Get pure UTC date strings (no local drift)
-        const offStartDay = offStartUTC.toISOString().split("T")[0];
-        const offEndDay = offEndUTC.toISOString().split("T")[0];
-
-        // 3️⃣ Convert selectedDate to UTC day string as well
-        const selectedUTC = new Date(
+        // Build the provider-local date, then express it as UTC YYYY-MM-DD string
+        const selectedDayUTC = new Date(
           Date.UTC(
             selectedDate.getFullYear(),
             selectedDate.getMonth(),
             selectedDate.getDate()
           )
-        );
-        const selectedDay = selectedUTC.toISOString().split("T")[0];
+        )
+          .toISOString()
+          .slice(0, 10);
 
         const match =
-          selectedDay >= offStartDay && selectedDay <= offEndDay;
+          selectedDayUTC >= offStartDay && selectedDayUTC <= offEndDay;
 
         if (match) {
           console.log("🚫 MATCHED full-day off:", {
-            selectedDay,
+            selectedDayUTC,
             offStartDay,
             offEndDay,
             rawStart: o.start_time,
             rawEnd: o.end_time,
-          });
-        } else {
-          console.log("🕓 No match:", {
-            selectedDay,
-            offStartDay,
-            offEndDay,
           });
         }
 
@@ -355,9 +346,6 @@ export default function BookingPage() {
         ]);
         return;
       }
-
-
-
 
 
       // ✅ Combine appts + offs
