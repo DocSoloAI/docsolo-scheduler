@@ -402,28 +402,36 @@ async function loadAvailabilityOverrides() {
             const isHoliday = o.reason?.startsWith("holiday:");
             let start: Date;
             let end: Date;
-            let isFullDay = false;
 
             if (o.off_date && o.all_day) {
-              // 🟩 Create a full-day event that shows in the timed grid (not all-day row)
+              // 🟩 Build full-day range to fill entire column
               const [year, month, day] = o.off_date.split("-").map(Number);
               start = new Date(year, month - 1, day, 0, 0, 0, 0);
               end = new Date(year, month - 1, day, 23, 59, 59, 999);
-
-              return {
-                id: o.id,
-                title: "OFF",
-                start,
-                end,
-                allDay: false, // 👈 forces it into the timed grid
-                display: "auto", // clickable/editable
-                backgroundColor: "#fecaca",
-                borderColor: "#f87171",
-                textColor: "#7f1d1d",
-                extendedProps: { source: "time_off", status: "time_off" },
-              };
+            } else {
+              // 🟦 Partial-day time off
+              start = new Date(o.start_time);
+              end = new Date(o.end_time);
             }
+
+            return {
+              id: o.id,
+              title: isHoliday ? "Office Closed" : o.reason || "OFF",
+              start,
+              end,
+              allDay: false, // ✅ force into hourly grid
+              display: "auto",
+              backgroundColor: isHoliday ? "#fde68a" : "#fecaca", // 🟨 yellowish for holidays
+              borderColor: isHoliday ? "#facc15" : "#f87171",
+              textColor: isHoliday ? "#78350f" : "#7f1d1d",
+              extendedProps: {
+                source: "time_off",
+                status: "time_off",
+                meta_repeat: o.meta_repeat || null,
+              },
+            };
           }) ?? [];
+
 
 
       // ---------- Merge & Render ----------
