@@ -264,16 +264,19 @@ export default function BookingPage() {
         .lte("end_time", endOfDayUTC.toISOString());
 
         // --- Fetch provider time_off (with all_day flag) ---
-        // 🧩 Include any time_off overlapping the selected day (not just fully inside)
-        const { data: offs } = await supabase
+        // 🧩 Include any time_off overlapping the selected day (works for full/partial/multi-day)
+        const { data: offs, error: offErr } = await supabase
           .from("time_off")
           .select("start_time, end_time, all_day, reason")
           .eq("provider_id", providerId)
-          .or(
-            `
-              and(start_time.lte.${endOfDayUTC.toISOString()},end_time.gte.${startOfDayUTC.toISOString()})
-            `
-          );
+          .or(`and(start_time.lte.${endOfDayUTC.toISOString()},end_time.gte.${startOfDayUTC.toISOString()})`);
+
+        if (offErr) {
+          console.error("❌ Error fetching time_off:", offErr.message);
+        } else {
+          console.log("🟩 Time-off rows fetched:", offs);
+        }
+
 
       // ✅ Normalize time_off — expand all_day blocks safely
       const mappedOffs = (offs || []).map((o) => {
