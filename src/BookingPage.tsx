@@ -304,28 +304,48 @@ export default function BookingPage() {
         };
       });
 
-      // 🟥 Detect full-day offs correctly in provider's timezone
+      // 🟥 Detect full-day offs correctly and show clear debug output
       const hasFullDayOff = (offs || []).some((o) => {
         if (!o.all_day) return false;
 
-        // 🧩 1. Parse Supabase datetimes as UTC, not local
-        const offStartUTC = new Date(o.start_time + "Z"); // "Z" forces UTC parse
+        // 1️⃣ Force UTC parsing of Supabase datetimes
+        const offStartUTC = new Date(o.start_time + "Z");
         const offEndUTC = new Date(o.end_time + "Z");
 
-        // 🧩 2. Convert those UTC times into provider-local time
-        const offStartLocal = fromUTCToTZ(offStartUTC, providerTimezone);
-        const offEndLocal = fromUTCToTZ(offEndUTC, providerTimezone);
+        // 2️⃣ Get pure UTC date strings (no local drift)
+        const offStartDay = offStartUTC.toISOString().split("T")[0];
+        const offEndDay = offEndUTC.toISOString().split("T")[0];
 
-        // 🧩 3. Normalize both to YYYY-MM-DD for safe date-only compare
-        const offStartStr = offStartLocal.toISOString().split("T")[0];
-        const offEndStr = offEndLocal.toISOString().split("T")[0];
+        // 3️⃣ Convert selectedDate to UTC day string as well
+        const selectedUTC = new Date(
+          Date.UTC(
+            selectedDate.getFullYear(),
+            selectedDate.getMonth(),
+            selectedDate.getDate()
+          )
+        );
+        const selectedDay = selectedUTC.toISOString().split("T")[0];
 
-        // selectedDate is already local → normalize too
-        const selectedLocal = fromUTCToTZ(selectedDate, providerTimezone);
-        const selectedStr = selectedLocal.toISOString().split("T")[0];
+        const match =
+          selectedDay >= offStartDay && selectedDay <= offEndDay;
 
-        // ✅ 4. Compare only date parts (no time drift possible)
-        return selectedStr >= offStartStr && selectedStr <= offEndStr;
+        if (match) {
+          console.log("🚫 MATCHED full-day off:", {
+            selectedDay,
+            offStartDay,
+            offEndDay,
+            rawStart: o.start_time,
+            rawEnd: o.end_time,
+          });
+        } else {
+          console.log("🕓 No match:", {
+            selectedDay,
+            offStartDay,
+            offEndDay,
+          });
+        }
+
+        return match;
       });
 
       if (hasFullDayOff) {
@@ -335,6 +355,7 @@ export default function BookingPage() {
         ]);
         return;
       }
+
 
 
 
