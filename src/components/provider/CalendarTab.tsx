@@ -756,7 +756,6 @@ console.log("🔍 Raw ctxHours sample:", ctxHours.slice(0, 3));
     if (!selectedDate) return;
     setSaving(true);
 
-    // Normalize date objects
     const start = selectedDate instanceof Date ? selectedDate : new Date(selectedDate);
     const svc = services.find((s) => String(s.id) === String(selectedService));
     const svcDuration = svc?.duration_minutes ?? duration;
@@ -765,12 +764,11 @@ console.log("🔍 Raw ctxHours sample:", ctxHours.slice(0, 3));
         ? endDate
         : new Date(endDate || start.getTime() + svcDuration * 60000);
 
-    // ✅ Helper: convert local → UTC ISO safely once
     const toUTC = (d: Date) =>
       new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString();
 
     try {
-      // 🧩 1. UPDATE existing appointment or time off
+      // 🧩 1️⃣ UPDATE existing appointment or time off
       if (editingEvent) {
         if (isTimeOff) {
           const isFullDay =
@@ -779,15 +777,24 @@ console.log("🔍 Raw ctxHours sample:", ctxHours.slice(0, 3));
             end.getHours() === 23 &&
             end.getMinutes() === 59;
 
-          // ✅ Use toUTC() instead of .toISOString()
+          const updateData: any = {
+            reason: timeOffReason || "Time Off",
+            all_day: isFullDay,
+          };
+
+          if (isFullDay) {
+            updateData.off_date = selectedDate.toISOString().slice(0, 10);
+            updateData.start_time = null;
+            updateData.end_time = null;
+          } else {
+            updateData.start_time = toUTC(start);
+            updateData.end_time = toUTC(end);
+            updateData.off_date = null;
+          }
+
           const { error: offErr } = await supabase
             .from("time_off")
-            .update({
-              start_time: toUTC(start),
-              end_time: toUTC(end),
-              reason: timeOffReason || "Time Off",
-              all_day: isFullDay,
-            })
+            .update(updateData)
             .eq("id", editingEvent.id);
 
           if (offErr) throw offErr;
@@ -799,7 +806,7 @@ console.log("🔍 Raw ctxHours sample:", ctxHours.slice(0, 3));
           return;
         }
 
-        // ✅ Appointment update
+        // Appointment update
         const { data: updated, error } = await supabase
           .from("appointments")
           .update({
@@ -822,7 +829,7 @@ console.log("🔍 Raw ctxHours sample:", ctxHours.slice(0, 3));
         return;
       }
 
-      // 🧩 2. CREATE repeating time off series
+      // 🧩 2️⃣ CREATE repeating time off series
       if (isTimeOff && isRepeating) {
         const repeats: any[] = [];
         const groupId = crypto.randomUUID();
@@ -850,11 +857,9 @@ console.log("🔍 Raw ctxHours sample:", ctxHours.slice(0, 3));
               start_date: toUTC(start),
             },
           });
-          if (repeatUnit === "weeks") {
-            current.setDate(current.getDate() + repeatFrequency * 7);
-          } else {
-            current.setDate(current.getDate() + repeatFrequency);
-          }
+          current.setDate(
+            current.getDate() + (repeatUnit === "weeks" ? repeatFrequency * 7 : repeatFrequency)
+          );
         }
 
         const { error: repeatErr } = await supabase.from("time_off").insert(repeats);
@@ -867,7 +872,7 @@ console.log("🔍 Raw ctxHours sample:", ctxHours.slice(0, 3));
         return;
       }
 
-      // 🟩 3A. CREATE one-off availability override
+      // 🟩 3️⃣ CREATE one-off availability override
       if (isAvailability) {
         const { error: availErr } = await supabase.from("availability_overrides").insert([
           {
@@ -885,7 +890,7 @@ console.log("🔍 Raw ctxHours sample:", ctxHours.slice(0, 3));
         return;
       }
 
-      // 🟩 3B. CREATE single time-off block
+      // 🟥 4️⃣ CREATE new single time-off block
       if (isTimeOff) {
         const isFullDay =
           start.getHours() === 0 &&
@@ -893,25 +898,17 @@ console.log("🔍 Raw ctxHours sample:", ctxHours.slice(0, 3));
           end.getHours() === 23 &&
           end.getMinutes() === 59;
 
-        let insertData: any;
+        const insertData: any = {
+          provider_id: providerId,
+          reason: timeOffReason || "Time Off",
+          all_day: isFullDay,
+        };
 
         if (isFullDay) {
-          // ✅ Use off_date for all-day offs (no times)
-          insertData = {
-            provider_id: providerId,
-            off_date: selectedDate.toISOString().slice(0, 10), // 'YYYY-MM-DD'
-            all_day: true,
-            reason: timeOffReason || "Time Off",
-          };
+          insertData.off_date = selectedDate.toISOString().slice(0, 10);
         } else {
-          // ✅ Partial-day off: use times as before
-          insertData = {
-            provider_id: providerId,
-            start_time: toUTC(start),
-            end_time: toUTC(end),
-            reason: timeOffReason || "Time Off",
-            all_day: false,
-          };
+          insertData.start_time = toUTC(start);
+          insertData.end_time = toUTC(end);
         }
 
         const { data: newOff, error: offErr } = await supabase
@@ -922,19 +919,19 @@ console.log("🔍 Raw ctxHours sample:", ctxHours.slice(0, 3));
 
         if (offErr) throw offErr;
 
-        // 🧩 Instant render for full-day off (visual feedback)
+        // 🧩 Instant render for full-day off
         if (calendarRef.current && isFullDay && newOff) {
           const api = calendarRef.current.getApi();
           api.addEvent({
             id: newOff.id,
             title: "OFF",
-            start: isFullDay ? selectedDate : new Date(newOff.start_time),
-            end: isFullDay ? selectedDate : new Date(newOff.end_time),
-            allDay: isFullDay,
+            start: new Date(`${insertData.off_date}T00:00:00`),
+            end: new Date(`${insertData.off_date}T23:59:59`),
+            allDay: false, // ✅ ensures full-day column fill
             display: "auto",
-            backgroundColor: "#fca5a5",
+            backgroundColor: "#fecaca",
             borderColor: "#f87171",
-            textColor: "#fff",
+            textColor: "#7f1d1d",
             extendedProps: { source: "time_off", status: "time_off" },
           });
         }
@@ -946,7 +943,7 @@ console.log("🔍 Raw ctxHours sample:", ctxHours.slice(0, 3));
         return;
       }
 
-      // 🩵 4. CREATE new appointment
+      // 🩵 5️⃣ CREATE new appointment
       const { data: newAppt, error: apptErr } = await supabase
         .from("appointments")
         .insert([
@@ -975,10 +972,6 @@ console.log("🔍 Raw ctxHours sample:", ctxHours.slice(0, 3));
       setSaving(false);
     }
   };
-
-
-
-
 
   const renderEventContent = (eventInfo: any) => {
     const { event, view } = eventInfo;
