@@ -304,6 +304,21 @@ export default function BookingPage() {
         };
       });
 
+      // 🟥 If any full-day off overlaps the selected date (local), clear all availability
+      const hasFullDayOff = (offs || []).some((o) => {
+        if (!o.all_day) return false;
+        const offDate = new Date(o.start_time);
+        return offDate.toDateString() === selectedDate.toDateString();
+      });
+
+      if (hasFullDayOff) {
+        setAvailableTimes([
+          "No appointments available. Either the office is closed, or fully booked.",
+        ]);
+        return;
+      }
+
+
       // ✅ Combine appts + offs
       const bookedSlots = [
         ...(appts || [])
@@ -316,15 +331,6 @@ export default function BookingPage() {
         ...mappedOffs,
       ];
 
-      // 🟥 If any full-day off exists for this date, clear all availability
-      const hasFullDayOff = mappedOffs.some(
-        (o) => o.all_day && o.start.toDateString() === selectedDate.toDateString()
-      );
-      if (hasFullDayOff) {
-        setAvailableTimes([]);
-        return;
-      }
-
       // ✅ Filter out slots that overlap or fall on all-day off
       const freeSlots = allSlots
         .filter((slot) => {
@@ -334,7 +340,9 @@ export default function BookingPage() {
               b.all_day &&
               b.start.toDateString() === slot.date.toDateString();
             // Or any overlapping time window
-            const overlaps = slot.date >= b.start && slot.date < b.end;
+            // ✅ Compare in local time context to avoid UTC bleedover
+            const slotTime = fromTZToUTC(slot.date, providerTimezone);
+            const overlaps = slotTime >= b.start && slotTime < b.end;
             return sameDay || overlaps;
           });
         })
