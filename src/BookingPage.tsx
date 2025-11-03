@@ -192,93 +192,92 @@ export default function BookingPage() {
   }, [providerId, selectedDate]);
 
 
-useEffect(() => {
-  let isActive = true; // ✅ marker to cancel stale loads
+  useEffect(() => {
+    let isActive = true; // ✅ cancel stale loads if date changes mid-request
 
-  const loadAvailability = async () => {
-    if (!providerId || !selectedDate) return;
-    setAvailableTimes([]); // clear previous results immediately
+    const loadAvailability = async () => {
+      if (!providerId || !selectedDate) return;
 
-    const dayOfWeek = selectedDate.getDay();
+      setAvailableTimes([]); // clear previous results immediately
 
-    // --- Fetch provider availability ---
-    const { data: availRows, error } = await supabase
-      .from("availability")
-      .select("start_time, end_time, slot_interval")
-      .eq("provider_id", providerId)
-      .eq("day_of_week", dayOfWeek)
-      .eq("is_active", true);
+      const dayOfWeek = selectedDate.getDay();
 
-    if (!isActive) return;
-    if (error || !availRows || availRows.length === 0) {
-      setAvailableTimes([]);
-      return;
-    }
+      // --- Fetch provider availability ---
+      const { data: availRows, error: availErr } = await supabase
+        .from("availability")
+        .select("start_time, end_time, slot_interval")
+        .eq("provider_id", providerId)
+        .eq("day_of_week", dayOfWeek)
+        .eq("is_active", true);
 
-    // --- Build time slots ---
-    let allSlots: { time: string; date: Date }[] = [];
-    availRows.forEach((avail) => {
-      const startLocal = new Date(selectedDate);
-      const [sh, sm] = (avail.start_time as string).split(":").map(Number);
-      startLocal.setHours(sh, sm, 0, 0);
-
-      const endLocal = new Date(selectedDate);
-      const [eh, em] = (avail.end_time as string).split(":").map(Number);
-      endLocal.setHours(eh, em, 0, 0);
-
-      const startUTC = fromTZToUTC(startLocal, providerTimezone);
-      const endUTC = fromTZToUTC(endLocal, providerTimezone);
-      const step = avail.slot_interval || 30;
-      const cur = new Date(startUTC);
-
-      while (cur < endUTC) {
-        const localTime = fromUTCToTZ(cur, providerTimezone);
-        allSlots.push({
-          time: formatInTZ(localTime, providerTimezone, "h:mm a"),
-          date: new Date(localTime),
-        });
-        cur.setMinutes(cur.getMinutes() + step);
+      if (!isActive) return;
+      if (availErr || !availRows || availRows.length === 0) {
+        setAvailableTimes([]);
+        return;
       }
-    });
 
-    if (!isActive) return;
-    allSlots.sort((a, b) => a.date.getTime() - b.date.getTime());
-    const now = new Date();
+      // --- Build all possible time slots ---
+      let allSlots: { time: string; date: Date }[] = [];
+      availRows.forEach((avail) => {
+        const startLocal = new Date(selectedDate);
+        const [sh, sm] = (avail.start_time as string).split(":").map(Number);
+        startLocal.setHours(sh, sm, 0, 0);
 
-    // ✅ Day boundaries (local → UTC) — non-mutating copies
-    const localCopyStart = new Date(selectedDate.getTime());
-    const localCopyEnd = new Date(selectedDate.getTime());
-    localCopyStart.setHours(0, 0, 0, 0);
-    localCopyEnd.setHours(23, 59, 59, 999);
+        const endLocal = new Date(selectedDate);
+        const [eh, em] = (avail.end_time as string).split(":").map(Number);
+        endLocal.setHours(eh, em, 0, 0);
 
-    const startOfDayUTC = fromTZToUTC(localCopyStart, providerTimezone);
-    const endOfDayUTC = fromTZToUTC(localCopyEnd, providerTimezone);
+        const startUTC = fromTZToUTC(startLocal, providerTimezone);
+        const endUTC = fromTZToUTC(endLocal, providerTimezone);
+        const step = avail.slot_interval || 30;
+        const cur = new Date(startUTC);
 
-    // --- Fetch appointments ---
-    const { data: appts } = await supabase
-      .from("appointments")
-      .select("id, start_time, end_time, status")
-      .eq("provider_id", providerId)
-      .eq("status", "booked")
-      .gte("start_time", startOfDayUTC.toISOString())
-      .lte("end_time", endOfDayUTC.toISOString());
+        while (cur < endUTC) {
+          const localTime = fromUTCToTZ(cur, providerTimezone);
+          allSlots.push({
+            time: formatInTZ(localTime, providerTimezone, "h:mm a"),
+            date: new Date(localTime),
+          });
+          cur.setMinutes(cur.getMinutes() + step);
+        }
+      });
 
-    // --- Fetch time_off (overlaps) ---
-    const { data: offs } = await supabase
-      .from("time_off")
-      .select("start_time, end_time, all_day, reason")
-      .eq("provider_id", providerId)
-      .or(`and(start_time.lte.${endOfDayUTC.toISOString()},end_time.gte.${startOfDayUTC.toISOString()})`);
+      if (!isActive) return;
+      allSlots.sort((a, b) => a.date.getTime() - b.date.getTime());
+      const now = new Date();
 
-    if (!isActive) return;
-    console.log("🟩 Time-off rows fetched:", offs);
+      // --- Build UTC day boundaries safely (non-mutating) ---
+      const localCopyStart = new Date(selectedDate.getTime());
+      const localCopyEnd = new Date(selectedDate.getTime());
+      localCopyStart.setHours(0, 0, 0, 0);
+      localCopyEnd.setHours(23, 59, 59, 999);
 
-    // ✅ Full-day off detection (raw UTC)
-    const hasFullDayOff = (offs || []).some((o) => {
-      if (!o.all_day) return false;
-      const offStartDay = o.start_time.slice(0, 10);
-      const offEndDay = o.end_time.slice(0, 10);
-      const selectedDayUTC = new Date(
+      const startOfDayUTC = fromTZToUTC(localCopyStart, providerTimezone);
+      const endOfDayUTC = fromTZToUTC(localCopyEnd, providerTimezone);
+
+      // --- Fetch appointments ---
+      const { data: appts } = await supabase
+        .from("appointments")
+        .select("id, start_time, end_time, status")
+        .eq("provider_id", providerId)
+        .eq("status", "booked")
+        .gte("start_time", startOfDayUTC.toISOString())
+        .lte("end_time", endOfDayUTC.toISOString());
+
+      if (!isActive) return;
+
+      // --- Fetch time_off (then filter by exact date match) ---
+      const { data: rawOffs, error: offErr } = await supabase
+        .from("time_off")
+        .select("start_time, end_time, all_day, reason")
+        .eq("provider_id", providerId);
+
+      if (offErr) {
+        console.error("❌ time_off fetch error:", offErr);
+      }
+
+      // ✅ Keep only rows that match the selected date (by YYYY-MM-DD)
+      const selectedDayString = new Date(
         Date.UTC(
           selectedDate.getFullYear(),
           selectedDate.getMonth(),
@@ -287,82 +286,79 @@ useEffect(() => {
       )
         .toISOString()
         .slice(0, 10);
-      return selectedDayUTC >= offStartDay && selectedDayUTC <= offEndDay;
-    });
 
-    if (!isActive) return;
-
-    if (hasFullDayOff) {
-      console.log("🚫 Full-day OFF detected for", selectedDate.toDateString());
-      setAvailableTimes([
-        "No appointments available. Either the office is closed, or fully booked.",
-      ]);
-      return;
-    }
-
-    // ✅ Normalize time_off for partial-day logic
-    const mappedOffs = (offs || []).map((o) => {
-      const start = new Date(o.start_time);
-      const end = new Date(o.end_time);
-      if (o.all_day) {
-        const localStart = new Date(selectedDate.getTime());
-        localStart.setHours(0, 0, 0, 0);
-        const localEnd = new Date(selectedDate.getTime());
-        localEnd.setHours(23, 59, 59, 999);
-        return {
-          start: fromTZToUTC(localStart, providerTimezone),
-          end: fromTZToUTC(localEnd, providerTimezone),
-          all_day: true,
-        };
-      }
-      return { start, end, all_day: false };
-    });
-
-    // ✅ Combine appointments + time_off
-    const bookedSlots = [
-      ...(appts || [])
-        .filter((a) => !rescheduleId || a.id !== rescheduleId)
-        .map((a) => ({
-          start: new Date(a.start_time),
-          end: new Date(a.end_time),
-          all_day: false,
-        })),
-      ...mappedOffs,
-    ];
-
-    // ✅ Filter free slots
-    const freeSlots = allSlots
-      .filter((slot) => {
-        return !bookedSlots.some((b) => {
-          const sameDay = b.all_day && b.start.toDateString() === slot.date.toDateString();
-          const overlaps = slot.date >= b.start && slot.date < b.end;
-          return sameDay || overlaps;
-        });
-      })
-      .filter((slot) => {
-        if (selectedDate.toDateString() !== now.toDateString()) return true;
-        return slot.date > now;
+      const offs = (rawOffs || []).filter((o) => {
+        const offDay = o.start_time.slice(0, 10);
+        return offDay === selectedDayString;
       });
 
-    if (!isActive) return;
+      console.log("🟩 Time-off rows fetched:", offs);
 
-    // ✅ Update availability
-    if (freeSlots.length === 0) {
-      setAvailableTimes([
-        "No appointments available. Either the office is closed, or fully booked.",
-      ]);
-    } else {
-      setAvailableTimes(freeSlots.map((s) => s.time));
-    }
-  };
+      if (!isActive) return;
 
-  loadAvailability();
+      // ✅ Detect full-day off
+      const hasFullDayOff = (offs || []).some((o) => o.all_day);
+      if (hasFullDayOff) {
+        console.log("🚫 Full-day OFF detected for", selectedDate.toDateString());
+        setAvailableTimes([
+          "No appointments available. Either the office is closed, or fully booked.",
+        ]);
+        return;
+      }
 
-  // 🧹 cancel stale async work if date changes
-  return () => {
-    isActive = false;
-  };
-}, [providerId, selectedDate]);
+      // ✅ Normalize time_off for partial-day logic
+      const mappedOffs = (offs || []).map((o) => {
+        const start = new Date(o.start_time);
+        const end = new Date(o.end_time);
+        return { start, end, all_day: !!o.all_day };
+      });
+
+      // ✅ Combine appointments + time_off
+      const bookedSlots = [
+        ...(appts || [])
+          .filter((a) => !rescheduleId || a.id !== rescheduleId)
+          .map((a) => ({
+            start: new Date(a.start_time),
+            end: new Date(a.end_time),
+            all_day: false,
+          })),
+        ...mappedOffs,
+      ];
+
+      // ✅ Filter out overlapping or all-day blocks
+      const freeSlots = allSlots
+        .filter((slot) => {
+          return !bookedSlots.some((b) => {
+            const sameDay = b.all_day && b.start.toDateString() === slot.date.toDateString();
+            const overlaps = slot.date >= b.start && slot.date < b.end;
+            return sameDay || overlaps;
+          });
+        })
+        .filter((slot) => {
+          if (selectedDate.toDateString() !== now.toDateString()) return true;
+          return slot.date > now;
+        });
+
+      if (!isActive) return;
+
+      // ✅ Display results
+      if (freeSlots.length === 0) {
+        setAvailableTimes([
+          "No appointments available. Either the office is closed, or fully booked.",
+        ]);
+      } else {
+        setAvailableTimes(freeSlots.map((s) => s.time));
+      }
+    };
+
+    loadAvailability();
+
+    // 🧹 Cancel any in-flight loads if date changes
+    return () => {
+      isActive = false;
+    };
+  }, [providerId, selectedDate]);
+
 
 
   // 🔽 Refs
