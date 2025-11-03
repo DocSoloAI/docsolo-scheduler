@@ -244,15 +244,16 @@ export default function BookingPage() {
 
       const now = new Date();
 
-      // ✅ Day boundaries (local → UTC)
-      const startOfDayUTC = fromTZToUTC(
-        new Date(selectedDate.setHours(0, 0, 0, 0)),
-        providerTimezone
-      );
-      const endOfDayUTC = fromTZToUTC(
-        new Date(selectedDate.setHours(23, 59, 59, 999)),
-        providerTimezone
-      );
+      // ✅ Day boundaries (local → UTC) — without mutating selectedDate
+      const localCopyStart = new Date(selectedDate.getTime());
+      const localCopyEnd = new Date(selectedDate.getTime());
+
+      localCopyStart.setHours(0, 0, 0, 0);
+      localCopyEnd.setHours(23, 59, 59, 999);
+
+      const startOfDayUTC = fromTZToUTC(localCopyStart, providerTimezone);
+      const endOfDayUTC = fromTZToUTC(localCopyEnd, providerTimezone);
+
 
       // --- Fetch booked appts ---
       const { data: appts } = await supabase
