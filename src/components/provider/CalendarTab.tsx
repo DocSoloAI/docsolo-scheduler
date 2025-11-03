@@ -895,31 +895,44 @@ console.log("🔍 Raw ctxHours sample:", ctxHours.slice(0, 3));
           end.getHours() === 23 &&
           end.getMinutes() === 59;
 
+        let insertData: any;
+
+        if (isFullDay) {
+          // ✅ Use off_date for all-day offs (no times)
+          insertData = {
+            provider_id: providerId,
+            off_date: selectedDate.toISOString().slice(0, 10), // 'YYYY-MM-DD'
+            all_day: true,
+            reason: timeOffReason || "Time Off",
+          };
+        } else {
+          // ✅ Partial-day off: use times as before
+          insertData = {
+            provider_id: providerId,
+            start_time: toUTC(start),
+            end_time: toUTC(end),
+            reason: timeOffReason || "Time Off",
+            all_day: false,
+          };
+        }
+
         const { data: newOff, error: offErr } = await supabase
           .from("time_off")
-          .insert([
-            {
-              provider_id: providerId,
-              start_time: toUTC(start),
-              end_time: toUTC(end),
-              reason: timeOffReason || "Time Off",
-              all_day: isFullDay,
-            },
-          ])
+          .insert([insertData])
           .select()
           .single();
 
         if (offErr) throw offErr;
 
-        // 🧩 Instant render for full-day off
+        // 🧩 Instant render for full-day off (visual feedback)
         if (calendarRef.current && isFullDay && newOff) {
           const api = calendarRef.current.getApi();
           api.addEvent({
             id: newOff.id,
             title: "OFF",
-            start: new Date(newOff.start_time),
-            end: new Date(newOff.end_time),
-            allDay: false,
+            start: isFullDay ? selectedDate : new Date(newOff.start_time),
+            end: isFullDay ? selectedDate : new Date(newOff.end_time),
+            allDay: isFullDay,
             display: "auto",
             backgroundColor: "#fca5a5",
             borderColor: "#f87171",
@@ -964,6 +977,7 @@ console.log("🔍 Raw ctxHours sample:", ctxHours.slice(0, 3));
       setSaving(false);
     }
   };
+
 
 
 
