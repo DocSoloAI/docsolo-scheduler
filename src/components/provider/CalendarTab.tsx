@@ -399,27 +399,42 @@ async function loadAvailabilityOverrides() {
       if (offError) throw new Error(offError.message);
 
       const mappedOffs =
-        offs?.map((o) => {
+        (offs || []).map((o) => {
           const isHoliday = o.reason?.startsWith("holiday:");
           const startFixed = new Date(o.start_time);
-          const endFixed   = new Date(o.end_time);
+          const endFixed = new Date(o.end_time);
 
+          // ✅ If it's an all-day block, render as a full background closure
+          if (o.all_day) {
+            return {
+              id: o.id,
+              title: "OFF",
+              start: startFixed,
+              end: endFixed,
+              allDay: false, // ✅ force it into the hourly grid
+              display: "auto", // ✅ make it interactive
+              backgroundColor: "#fca5a5",
+              borderColor: "#f87171",
+              textColor: "#fff",
+              extendedProps: { source: "time_off", status: "time_off" },
+            };
+          }
+
+
+          // ⏰ Otherwise, partial-day time off block
           return {
             id: o.id,
             title: isHoliday ? "Office Closed" : o.reason || "Closed",
-            start: isHoliday ? new Date(o.start_time) : startFixed, // ✅ use Date objects, not ISO strings
-            end: isHoliday ? new Date(o.end_time) : endFixed,
-            allDay: !!o.all_day,
+            start: startFixed,
+            end: endFixed,
+            allDay: false,
             backgroundColor: "#fca5a5",
             borderColor: "#fca5a5",
             textColor: "#fff",
-            extendedProps: {
-              source: "time_off",
-              status: "time_off",
-              meta_repeat: o.meta_repeat || null,
-            },
+            extendedProps: { source: "time_off", status: "time_off", meta_repeat: o.meta_repeat || null },
           };
-        }) ?? [];
+        });
+
 
 
 
@@ -648,55 +663,92 @@ console.log("🔍 Raw ctxHours sample:", ctxHours.slice(0, 3));
 
     // normal modal logic
     const isOff = event.extendedProps.status === "time_off";
+
+    // ✅ Convert UTC times from FullCalendar back to local JS Dates
+    const startLocal = new Date(event.start);
+    const endLocal = new Date(event.end);
+
     setEditingEvent({
       id: event.id,
-      start: event.startStr,
-      end: event.endStr,
+      start: startLocal,
+      end: endLocal,
       patient_id: event.extendedProps.patient_id,
       service_id: event.extendedProps.service_id,
       status: event.extendedProps.status,
       patient_note: event.extendedProps.patient_note || null,
     });
 
-    setSelectedDate(event.startStr);
+    setSelectedDate(startLocal);
+    setEndDate(endLocal);
     setSelectedPatient(event.extendedProps.patient_id || null);
     setSelectedService(event.extendedProps.service_id || null);
-    setDuration(
-      (new Date(event.endStr).getTime() - new Date(event.startStr).getTime()) / 60000
-    );
+    setDuration((endLocal.getTime() - startLocal.getTime()) / 60000);
 
     setIsTimeOff(isOff);
     setModalOpen(true);
   };
 
 
-
   const handleEventDrop = async (info: any) => {
+    // Immediately revert the visual change until confirmed
     info.revert();
 
+    const status = info.event.extendedProps?.status;
+    const source = info.event.extendedProps?.source;
+    const isTimeOff =
+      status === "time_off" ||
+      source === "time_off" ||
+      info.event.title?.toLowerCase()?.includes("off");
+
     showConfirm(
-      `Move this appointment from ${info.oldEvent.start?.toLocaleString()} to ${info.event.start?.toLocaleString()}?`,
+      `Move this ${isTimeOff ? "time off" : "appointment"} from ${info.oldEvent.start?.toLocaleString()} to ${info.event.start?.toLocaleString()}?`,
       async () => {
-        const { data: updated, error } = await supabase
-          .from("appointments")
-          .update({
-            start_time: info.event.start,
-            end_time: info.event.end,
-          })
-          .eq("id", info.event.id)
-          .select(
-            "id, start_time, patients(first_name,last_name,email), services(name)"
-          )
-          .single();
+        const start = info.event.start;
+        const end = info.event.end;
 
-        if (error) {
-          console.error("❌ Error updating appointment:", error.message);
-          return;
-        }
+        // ✅ Convert to UTC so times stay correct after drag
+        const toUTC = (d: Date) =>
+          new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString();
 
-        await safeReload();
-        if (updated) {
-          await sendDualEmail("update", providerId, updated);
+        try {
+          if (isTimeOff) {
+            // 🟥 Move a time-off block
+            const { error: offErr } = await supabase
+              .from("time_off")
+              .update({
+                start_time: toUTC(start),
+                end_time: toUTC(end),
+              })
+              .eq("id", info.event.id);
+
+            if (offErr) throw offErr;
+
+            toast.success("Time off moved ✅");
+            await loadEvents();
+            return;
+          }
+
+          // 🟦 Move a patient appointment
+          const { data: updated, error } = await supabase
+            .from("appointments")
+            .update({
+              start_time: toUTC(start),
+              end_time: toUTC(end),
+            })
+            .eq("id", info.event.id)
+            .select(
+              "id, start_time, patients(first_name,last_name,email), services(name)"
+            )
+            .single();
+
+          if (error) throw error;
+
+          await safeReload();
+          if (updated) await sendDualEmail("update", providerId, updated);
+          toast.success("Appointment moved ✅");
+        } catch (err: any) {
+          console.error("❌ Error updating event:", err.message);
+          toast.error("Error moving event: " + err.message);
         }
       }
     );
@@ -706,209 +758,214 @@ console.log("🔍 Raw ctxHours sample:", ctxHours.slice(0, 3));
     if (!selectedDate) return;
     setSaving(true);
 
-    if (!selectedDate) return;
-
-    // ✅ Normalize in case it's a string from editingEvent
-    const start =
-      selectedDate instanceof Date ? selectedDate : new Date(selectedDate);
+    // Normalize date objects
+    const start = selectedDate instanceof Date ? selectedDate : new Date(selectedDate);
     const svc = services.find((s) => String(s.id) === String(selectedService));
     const svcDuration = svc?.duration_minutes ?? duration;
     const end =
-      endDate instanceof Date ? endDate : new Date(endDate || start.getTime() + svcDuration * 60000);
+      endDate instanceof Date
+        ? endDate
+        : new Date(endDate || start.getTime() + svcDuration * 60000);
 
-    // 🧩 1. UPDATE existing appointment or time off
-    if (editingEvent) {
-      const { data: updated, error } = await supabase
-        .from("appointments")
-        .update({
-          start_time: start.toISOString(),
-          end_time: end.toISOString(),
-          status: isTimeOff ? "time_off" : "booked",
-          patient_id: isTimeOff ? null : selectedPatient,
-          service_id: isTimeOff ? null : selectedService,
-        })
-        .eq("id", editingEvent.id)
-        .select(
-          "id, start_time, patients(first_name,last_name,email), services(name)"
-        )
-        .single();
+    // ✅ Helper: convert local → UTC ISO safely once
+    const toUTC = (d: Date) =>
+      new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString();
 
-      setSaving(false);
-      if (error) {
-        toast.error(`Error updating appointment: ${error.message}`);
-        return;
-      }
+    try {
+      // 🧩 1. UPDATE existing appointment or time off
+      if (editingEvent) {
+        if (isTimeOff) {
+          const isFullDay =
+            start.getHours() === 0 &&
+            start.getMinutes() === 0 &&
+            end.getHours() === 23 &&
+            end.getMinutes() === 59;
 
-      await safeReload();
-      resetForm();
+          // ✅ Use toUTC() instead of .toISOString()
+          const { error: offErr } = await supabase
+            .from("time_off")
+            .update({
+              start_time: toUTC(start),
+              end_time: toUTC(end),
+              reason: timeOffReason || "Time Off",
+              all_day: isFullDay,
+            })
+            .eq("id", editingEvent.id);
 
-      // ✅ Stay on same date after saving
-      if (calendarRef.current && selectedDate) {
-        calendarRef.current.getApi().gotoDate(new Date(selectedDate));
-      }
+          if (offErr) throw offErr;
 
-      if (!isTimeOff && updated) {
-        await sendDualEmail("update", providerId, updated);
-      }
-      return;
-    }
-
-    // 🧩 2. CREATE repeating time off series
-    if (isTimeOff && isRepeating) {
-      const repeats: any[] = [];
-      const groupId = crypto.randomUUID(); // unique ID per series
-      const until = repeatUntil
-        ? new Date(repeatUntil)
-        : (() => {
-            const d = new Date();
-            d.setFullYear(d.getFullYear() + 1); // default 1 year ahead
-            return d;
-          })();
-
-      let current = new Date(start);
-      while (current <= until) {
-        const endCurrent = new Date(current.getTime() + duration * 60000);
-        repeats.push({
-          provider_id: providerId,
-          start_time: current.toISOString(),
-          end_time: endCurrent.toISOString(),
-          reason: timeOffReason || "Repeating time off",
-          meta_repeat: {
-            group_id: groupId,
-            frequency: repeatFrequency,
-            unit: repeatUnit,
-            reason: timeOffReason || "Repeating time off",
-            start_date: start.toISOString(),
-          },
-        });
-
-        // increment by chosen interval
-        if (repeatUnit === "weeks") {
-          current.setDate(current.getDate() + repeatFrequency * 7);
-        } else {
-          current.setDate(current.getDate() + repeatFrequency);
-        }
-      }
-
-      const { error: repeatErr } = await supabase.from("time_off").insert(repeats);
-
-      setSaving(false);
-      if (repeatErr) {
-        toast.error(`Error saving repeating time off: ${repeatErr.message}`);
-        return;
-      }
-
-      await safeReload();
-      resetForm();
-      toast.success(`Added ${repeats.length} repeating time-off blocks ✅`);
-      return;
-      }
-
-    // 🟩 3A. CREATE single availability override
-    if (isAvailability) {
-      try {
-        const { error: availErr } = await supabase.from("availability_overrides").insert([
-          {
-            provider_id: providerId,
-            start_time: selectedDate.toISOString(),
-            end_time: endDate ? endDate.toISOString() : null,
-            note: "One-off availability",
-          },
-        ]);
-
-        setSaving(false);
-        if (availErr) {
-          toast.error(`Error saving availability: ${availErr.message}`);
+          toast.success("Time off updated ✅");
+          await loadEvents();
+          resetForm();
+          setSaving(false);
           return;
         }
 
-        await loadEvents(); // ✅ refresh calendar to show teal block
+        // ✅ Appointment update
+        const { data: updated, error } = await supabase
+          .from("appointments")
+          .update({
+            start_time: toUTC(start),
+            end_time: toUTC(end),
+            status: "booked",
+            patient_id: selectedPatient,
+            service_id: selectedService,
+          })
+          .eq("id", editingEvent.id)
+          .select("id, start_time, patients(first_name,last_name,email), services(name)")
+          .single();
+
+        if (error) throw error;
+
+        await safeReload();
         resetForm();
-        toast.success("Added custom availability");
-        return;
-      } catch (err: any) {
-        console.error("❌ Error adding availability:", err);
-        toast.error("Error adding availability.");
+        if (updated) await sendDualEmail("update", providerId, updated);
         setSaving(false);
         return;
       }
-    }
 
+      // 🧩 2. CREATE repeating time off series
+      if (isTimeOff && isRepeating) {
+        const repeats: any[] = [];
+        const groupId = crypto.randomUUID();
+        const until = repeatUntil
+          ? new Date(repeatUntil)
+          : (() => {
+              const d = new Date();
+              d.setFullYear(d.getFullYear() + 1);
+              return d;
+            })();
 
-    // 🧩 3. CREATE single appointment or time off
-    if (isTimeOff) {
-      // ---------- CREATE SINGLE TIME OFF ----------
-      // ✅ Automatically detect if this is a full-day block (00:00–23:59)
-      const isFullDay =
-        start.getHours() === 0 &&
-        start.getMinutes() === 0 &&
-        end.getHours() === 23 &&
-        end.getMinutes() === 59;
+        let current = new Date(start);
+        while (current <= until) {
+          const endCurrent = new Date(current.getTime() + duration * 60000);
+          repeats.push({
+            provider_id: providerId,
+            start_time: toUTC(current),
+            end_time: toUTC(endCurrent),
+            reason: timeOffReason || "Repeating time off",
+            meta_repeat: {
+              group_id: groupId,
+              frequency: repeatFrequency,
+              unit: repeatUnit,
+              reason: timeOffReason || "Repeating time off",
+              start_date: toUTC(start),
+            },
+          });
+          if (repeatUnit === "weeks") {
+            current.setDate(current.getDate() + repeatFrequency * 7);
+          } else {
+            current.setDate(current.getDate() + repeatFrequency);
+          }
+        }
 
-      // ✅ Helper: convert local → UTC ISO (prevents +4h shift)
-      const toUTC = (date: Date) =>
-        new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString();
+        const { error: repeatErr } = await supabase.from("time_off").insert(repeats);
+        if (repeatErr) throw repeatErr;
 
-      // ✅ Normalize full-day range before saving
-      if (timeOffMode === "day") {
-        start.setHours(0, 0, 0, 0);
-        end.setHours(23, 59, 59, 999);
-      }
-
-      // ✅ Save to Supabase with explicit all_day flag
-      const { error: offErr } = await supabase.from("time_off").insert([
-        {
-          provider_id: providerId,
-          start_time: toUTC(start),
-          end_time: toUTC(end),
-          reason: timeOffReason || "Time Off",
-          all_day: isFullDay, // <— new field for full vs partial
-        },
-      ]);
-
-      setSaving(false);
-      if (offErr) {
-        toast.error(`Error saving time off: ${offErr.message}`);
+        await safeReload();
+        resetForm();
+        toast.success(`Added ${repeats.length} repeating time-off blocks ✅`);
+        setSaving(false);
         return;
       }
 
-      await loadEvents(); // refresh calendar immediately
+      // 🟩 3A. CREATE one-off availability override
+      if (isAvailability) {
+        const { error: availErr } = await supabase.from("availability_overrides").insert([
+          {
+            provider_id: providerId,
+            start_time: toUTC(start),
+            end_time: toUTC(end),
+            note: "One-off availability",
+          },
+        ]);
+        if (availErr) throw availErr;
+        await loadEvents();
+        resetForm();
+        toast.success("Added custom availability");
+        setSaving(false);
+        return;
+      }
+
+      // 🟩 3B. CREATE single time-off block
+      if (isTimeOff) {
+        const isFullDay =
+          start.getHours() === 0 &&
+          start.getMinutes() === 0 &&
+          end.getHours() === 23 &&
+          end.getMinutes() === 59;
+
+        const { data: newOff, error: offErr } = await supabase
+          .from("time_off")
+          .insert([
+            {
+              provider_id: providerId,
+              start_time: toUTC(start),
+              end_time: toUTC(end),
+              reason: timeOffReason || "Time Off",
+              all_day: isFullDay,
+            },
+          ])
+          .select()
+          .single();
+
+        if (offErr) throw offErr;
+
+        // 🧩 Instant render for full-day off
+        if (calendarRef.current && isFullDay && newOff) {
+          const api = calendarRef.current.getApi();
+          api.addEvent({
+            id: newOff.id,
+            title: "OFF",
+            start: new Date(newOff.start_time),
+            end: new Date(newOff.end_time),
+            allDay: false,
+            display: "auto",
+            backgroundColor: "#fca5a5",
+            borderColor: "#f87171",
+            textColor: "#fff",
+            extendedProps: { source: "time_off", status: "time_off" },
+          });
+        }
+
+        await loadEvents();
+        resetForm();
+        toast.success("Time off added ✅");
+        setSaving(false);
+        return;
+      }
+
+      // 🩵 4. CREATE new appointment
+      const { data: newAppt, error: apptErr } = await supabase
+        .from("appointments")
+        .insert([
+          {
+            provider_id: providerId,
+            start_time: toUTC(start),
+            end_time: toUTC(end),
+            status: "booked",
+            patient_id: selectedPatient,
+            service_id: selectedService,
+          },
+        ])
+        .select("id, start_time, patients(first_name,last_name,email), services(name)")
+        .single();
+
+      if (apptErr) throw apptErr;
+
+      await loadEvents();
       resetForm();
-      return;
-    }
-
-    // ---------- CREATE SINGLE APPOINTMENT ----------
-    const insertData: any = {
-      provider_id: providerId,
-      start_time: start.toISOString(),
-      end_time: end.toISOString(),
-      status: "booked",
-      patient_id: selectedPatient,
-      service_id: selectedService,
-    };
-
-    const { data: newAppt, error } = await supabase
-      .from("appointments")
-      .insert(insertData)
-      .select(
-        "id, start_time, status, patients(first_name,last_name,email), services(name)"
-      )
-      .single();
-
-    setSaving(false);
-    if (error) {
-      toast.error(`Error saving appointment: ${error.message}`);
-      return;
-    }
-
-    await new Promise((r) => setTimeout(r, 200));
-    await loadEvents(); // second reload after context rehydrates
-    resetForm();
-
-    if (newAppt) {
-      await sendDualEmail("confirmation", providerId, newAppt);
+      if (newAppt) await sendDualEmail("confirmation", providerId, newAppt);
+      toast.success("Appointment saved ✅");
+      setSaving(false);
+    } catch (err: any) {
+      console.error("❌ handleSave failed:", err);
+      toast.error(`Error saving: ${err.message}`);
+      setSaving(false);
     }
   };
+
+
 
 
   const renderEventContent = (eventInfo: any) => {

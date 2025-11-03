@@ -271,16 +271,16 @@ export default function BookingPage() {
         .gte("start_time", startOfDayUTC.toISOString())
         .lte("end_time", endOfDayUTC.toISOString());
 
-      // ✅ Normalize time_off — expand all_day blocks
+      // ✅ Normalize time_off — expand all_day blocks safely
       const mappedOffs = (offs || []).map((o) => {
         const start = new Date(o.start_time);
         const end = new Date(o.end_time);
 
-        // ✅ If marked all_day, expand to full local day boundaries
         if (o.all_day) {
-          const localStart = new Date(selectedDate);
+          // 🧩 Create fresh copies so we don't mutate selectedDate
+          const localStart = new Date(selectedDate.getTime());
           localStart.setHours(0, 0, 0, 0);
-          const localEnd = new Date(selectedDate);
+          const localEnd = new Date(selectedDate.getTime());
           localEnd.setHours(23, 59, 59, 999);
 
           return {
@@ -290,9 +290,12 @@ export default function BookingPage() {
           };
         }
 
-        return { start, end, all_day: false };
+        return {
+          start: fromTZToUTC(start, providerTimezone),
+          end: fromTZToUTC(end, providerTimezone),
+          all_day: false,
+        };
       });
-
 
       // ✅ Combine appts + offs
       const bookedSlots = [
@@ -306,6 +309,14 @@ export default function BookingPage() {
         ...mappedOffs,
       ];
 
+      // 🟥 If any full-day off exists for this date, clear all availability
+      const hasFullDayOff = mappedOffs.some(
+        (o) => o.all_day && o.start.toDateString() === selectedDate.toDateString()
+      );
+      if (hasFullDayOff) {
+        setAvailableTimes([]);
+        return;
+      }
 
       // ✅ Filter out slots that overlap or fall on all-day off
       const freeSlots = allSlots
@@ -325,12 +336,18 @@ export default function BookingPage() {
           return slot.date > now;
         });
 
-      setAvailableTimes(freeSlots.map((s) => s.time));
+      // ✅ If no free slots remain, show friendly message
+      if (freeSlots.length === 0) {
+        setAvailableTimes([
+          "No appointments available. Either the office is closed, or fully booked.",
+        ]);
+      } else {
+        setAvailableTimes(freeSlots.map((s) => s.time));
+      }
     };
 
     loadAvailability();
   }, [providerId, selectedDate]);
-
 
 
   // 🔽 Refs
