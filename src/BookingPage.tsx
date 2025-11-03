@@ -240,11 +240,11 @@ export default function BookingPage() {
         }
       });
 
-
       allSlots.sort((a, b) => a.date.getTime() - b.date.getTime());
 
       const now = new Date();
-      // ✅ Convert the provider's day boundaries to UTC before querying Supabase
+
+      // ✅ Day boundaries (local → UTC)
       const startOfDayUTC = fromTZToUTC(
         new Date(selectedDate.setHours(0, 0, 0, 0)),
         providerTimezone
@@ -253,7 +253,6 @@ export default function BookingPage() {
         new Date(selectedDate.setHours(23, 59, 59, 999)),
         providerTimezone
       );
-
 
       // --- Fetch booked appts ---
       const { data: appts } = await supabase
@@ -264,29 +263,51 @@ export default function BookingPage() {
         .gte("start_time", startOfDayUTC.toISOString())
         .lte("end_time", endOfDayUTC.toISOString());
 
-
-      // --- Fetch provider time_off (holidays, days off, etc.) ---
+      // --- Fetch provider time_off (with all_day flag) ---
       const { data: offs } = await supabase
         .from("time_off")
-        .select("start_time, end_time")
+        .select("start_time, end_time, all_day, reason")
         .eq("provider_id", providerId)
         .gte("start_time", startOfDayUTC.toISOString())
         .lte("end_time", endOfDayUTC.toISOString());
 
+      // ✅ Normalize time_off — expand all_day blocks
+      const mappedOffs = (offs || []).map((o) => {
+        const start = new Date(o.start_time);
+        const end = new Date(o.end_time);
+        if (o.all_day) {
+          start.setHours(0, 0, 0, 0);
+          end.setHours(23, 59, 59, 999);
+        }
+        return { start, end, all_day: o.all_day };
+      });
 
+      // ✅ Combine appts + offs
       const bookedSlots = [
-        ...(appts || []).filter((a) => !rescheduleId || a.id !== rescheduleId).map((a) => ({
-          start: new Date(a.start_time),
-          end: new Date(a.end_time),
-        })),
-        ...(offs || []).map((o) => ({
-          start: new Date(o.start_time),
-          end: new Date(o.end_time),
-        })),
+        ...(appts || [])
+          .filter((a) => !rescheduleId || a.id !== rescheduleId)
+          .map((a) => ({
+            start: new Date(a.start_time),
+            end: new Date(a.end_time),
+            all_day: false, // ✅ default for appointments
+          })),
+        ...mappedOffs,
       ];
 
+
+      // ✅ Filter out slots that overlap or fall on all-day off
       const freeSlots = allSlots
-        .filter((slot) => !bookedSlots.some((b) => slot.date >= b.start && slot.date < b.end))
+        .filter((slot) => {
+          return !bookedSlots.some((b) => {
+            // Block full-day offs for the same date
+            const sameDay =
+              b.all_day &&
+              b.start.toDateString() === slot.date.toDateString();
+            // Or any overlapping time window
+            const overlaps = slot.date >= b.start && slot.date < b.end;
+            return sameDay || overlaps;
+          });
+        })
         .filter((slot) => {
           if (selectedDate.toDateString() !== now.toDateString()) return true;
           return slot.date > now;
@@ -297,6 +318,7 @@ export default function BookingPage() {
 
     loadAvailability();
   }, [providerId, selectedDate]);
+
 
 
   // 🔽 Refs

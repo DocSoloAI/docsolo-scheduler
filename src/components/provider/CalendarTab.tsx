@@ -39,8 +39,6 @@ import {
 } from "@/components/ui/command";
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { toast } from "react-hot-toast";
-import { fromUTCToTZ } from "@/utils/timezone";
-
 
 // === Email helper ===
 async function sendDualEmail(
@@ -153,7 +151,7 @@ interface AppointmentEvent {
 
 export default function CalendarTab({ providerId }: { providerId: string }) {
   const { availability: ctxHours } = useSettings();
-console.log("🧩 CalendarTab ctxHours on mount:", ctxHours);
+  console.log("🧩 CalendarTab ctxHours on mount:", ctxHours);
   const [providerTimezone, setProviderTimezone] = useState("America/New_York");
 
   const [currentView] = useState("timeGridWeek");
@@ -184,12 +182,9 @@ console.log("🧩 CalendarTab ctxHours on mount:", ctxHours);
     const active = availability.filter((d: any) => d.is_active ?? d.enabled);
     if (active.length === 0) return;
 
-    const startTimes = active.map((d: any) =>
-      fromUTCToTZ(`1970-01-01T${d.start_time}`, providerTimezone)
-    );
-    const endTimes = active.map((d: any) =>
-      fromUTCToTZ(`1970-01-01T${d.end_time}`, providerTimezone)
-    );
+    const startTimes = active.map((d: any) => new Date(`1970-01-01T${d.start_time}`));
+    const endTimes   = active.map((d: any) => new Date(`1970-01-01T${d.end_time}`));
+
 
     const toMinutes = (d: Date) => d.getHours() * 60 + d.getMinutes();
     const earliest = Math.min(...startTimes.map(toMinutes));
@@ -368,9 +363,9 @@ async function loadAvailabilityOverrides() {
           const color =
             appt.status === "time_off" ? "#fca5a5" : serviceColor;
 
-          // 🕐 Convert UTC → Local properly
-          const startFixed = fromUTCToTZ(appt.start_time, providerTimezone);
-          const endFixed = fromUTCToTZ(appt.end_time, providerTimezone);
+          // 🕐 Keep times as JS Dates (FullCalendar will handle timezone)
+          const startFixed = new Date(appt.start_time);
+          const endFixed   = new Date(appt.end_time);
 
           return {
             id: appt.id,
@@ -378,8 +373,8 @@ async function loadAvailabilityOverrides() {
               appt.status === "time_off"
                 ? "OFF"
                 : `${patient?.first_name ?? ""} ${patient?.last_name ?? ""}`.trim(),
-            start: startFixed.toISOString(),
-            end: endFixed.toISOString(),
+            start: startFixed, // ✅ no .toISOString()
+            end: endFixed,
             backgroundColor: color,
             borderColor: color,
             textColor: "#fff",
@@ -394,6 +389,7 @@ async function loadAvailabilityOverrides() {
         }) ?? [];
 
 
+
       // ---------- Load Time-Off ----------
       const { data: offs, error: offError } = await supabase
         .from("time_off")
@@ -405,14 +401,14 @@ async function loadAvailabilityOverrides() {
       const mappedOffs =
         offs?.map((o) => {
           const isHoliday = o.reason?.startsWith("holiday:");
-          const startFixed = fromUTCToTZ(o.start_time, providerTimezone);
-          const endFixed = fromUTCToTZ(o.end_time, providerTimezone);
+          const startFixed = new Date(o.start_time);
+          const endFixed   = new Date(o.end_time);
 
           return {
             id: o.id,
             title: isHoliday ? "Office Closed" : o.reason || "Closed",
-            start: isHoliday ? o.start_time : startFixed.toISOString(),
-            end: isHoliday ? o.end_time : endFixed.toISOString(),
+            start: isHoliday ? new Date(o.start_time) : startFixed, // ✅ use Date objects, not ISO strings
+            end: isHoliday ? new Date(o.end_time) : endFixed,
             allDay: !!o.all_day,
             backgroundColor: "#fca5a5",
             borderColor: "#fca5a5",
@@ -435,52 +431,39 @@ console.log("🔍 Raw ctxHours sample:", ctxHours.slice(0, 3));
 
       const baseAvailability = (ctxHours || [])
         .filter((a: any) => a.is_active !== false)
-        .map((a: any) => {
-          const localStart = fromUTCToTZ(`1970-01-01T${a.start_time}`, providerTimezone)
-            .toTimeString()
-            .slice(0, 5);
-
-          const localEnd = fromUTCToTZ(`1970-01-01T${a.end_time}`, providerTimezone)
-            .toTimeString()
-            .slice(0, 5);
-
-          return {
-            id: `base-${a.day_of_week}-${a.start_time}`,
-            daysOfWeek: [a.day_of_week],
-            startTime: localStart,
-            endTime: localEnd,
-            display: "background",
-            backgroundColor: "#E0F7FA", // same as modal teal
-            borderColor: "transparent",
-            textColor: "transparent",
-            extendedProps: { status: "base_availability" },
-          };
-        });
+        .map((a: any) => ({
+          id: `base-${a.day_of_week}-${a.start_time}`,
+          daysOfWeek: [a.day_of_week],
+          startTime: a.start_time.slice(0, 5), // keep exact stored HH:mm
+          endTime: a.end_time.slice(0, 5),
+          display: "background",
+          backgroundColor: "#E0F7FA",
+          borderColor: "transparent",
+          textColor: "transparent",
+          extendedProps: { status: "base_availability" },
+        }));
 
 
     console.log("🩵 Base availability preview:", baseAvailability);
 
-    // ✅ Merge all event types into one unified list
+    // ✅ Merge everything together into one master array
     const allEvents = [
-      ...mappedAppts,
-      ...mappedOffs,
-      ...overrides,
-      ...baseAvailability,
+      ...mappedAppts,      // normal appointments
+      ...mappedOffs,       // time-off blocks (from modal)
+      ...overrides,        // one-off availability overrides (from modal)
+      ...baseAvailability, // recurring base availability (from Hours tab)
     ];
 
-    // 🧹 Clear existing events before adding the fresh list
-    // 🧹 Only render once ctxHours (base availability) is ready
-    if (calendarRef.current && (ctxHours?.length ?? 0) > 0) {
+    // ✅ Force FullCalendar to reload fresh events
+    if (calendarRef.current) {
       const api = calendarRef.current.getApi();
-
-      // Clear all events before re-adding
       api.removeAllEvents();
-
-      // Add everything fresh
-      allEvents.forEach((e: any) => api.addEvent(e));
-    } else {
-      console.warn("⚠️ Skipping render — ctxHours not ready yet");
+      allEvents.forEach((e) => api.addEvent(e));
     }
+
+    console.log("🧩 First few events:", allEvents.slice(0, 3));
+    console.log(`✅ Calendar reloaded: ${allEvents.length} total events`);
+
 
 
     // ✅ Debug logs
@@ -555,31 +538,54 @@ console.log("🔍 Raw ctxHours sample:", ctxHours.slice(0, 3));
   const handleDateClick = (info: any) => {
     setEditingEvent(null);
     setIsTimeOff(false);
-    setTimeOffMode("day"); // ✅ default to full day if clicked on day cell
 
-    const start = fromUTCToTZ(info.date, providerTimezone);
+    if (info.allDay) {
+      // 🕓 Create local midnight → 23:59 block
+      const start = new Date(info.date);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(start);
+      end.setHours(23, 59, 59, 999);
+
+      setTimeOffMode("day");
+      setIsTimeOff(true);
+      setSelectedDate(start);
+      setEndDate(end);
+      setModalOpen(true);
+
+      console.log("🌞 All-day block clicked:", start.toString());
+      return;
+    }
+
+    // ⏰ Normal partial-day logic
+    setTimeOffMode("hours");
+    const start = new Date(info.date);
     const end = new Date(start.getTime() + 30 * 60000);
-
     setSelectedDate(start);
     setEndDate(end);
-
     setModalOpen(true);
+    console.log("🕐 Time block clicked:", start.toString());
   };
+
 
 
   const handleSelect = (info: any) => {
     setEditingEvent(null);
-    setIsTimeOff(false);
-    setTimeOffMode("hours"); // ✅ default to partial-day if selecting hours
+    setIsAvailability(false);
+    setIsTimeOff(true);
+    setTimeOffMode("hours");
 
-    const start = fromUTCToTZ(info.start, providerTimezone);
-    const end = fromUTCToTZ(info.end, providerTimezone);
+    console.log("🕐 Raw select:", info.start, "→", info.end);
+
+    const start = new Date(info.start);
+    const end = new Date(info.end);
 
     setSelectedDate(start);
     setEndDate(end);
-
     setModalOpen(true);
   };
+
+
+
 
 
   const handleEventClick = async (info: any) => {
@@ -835,12 +841,22 @@ console.log("🔍 Raw ctxHours sample:", ctxHours.slice(0, 3));
         end.getHours() === 23 &&
         end.getMinutes() === 59;
 
+      // ✅ Helper: convert local → UTC ISO (prevents +4h shift)
+      const toUTC = (date: Date) =>
+        new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString();
+      
+      // ✅ Normalize full-day range before saving
+      if (timeOffMode === "day") {
+        start.setHours(0, 0, 0, 0);
+        end.setHours(23, 59, 59, 999);
+      }
+
       // ✅ Save to Supabase with explicit all_day flag
       const { error: offErr } = await supabase.from("time_off").insert([
         {
           provider_id: providerId,
-          start_time: start.toISOString(),
-          end_time: end.toISOString(),
+          start_time: toUTC(start),
+          end_time: toUTC(end),
           reason: timeOffReason || "Time Off",
           all_day: isFullDay, // <— new field for full vs partial
         },
@@ -855,7 +871,7 @@ console.log("🔍 Raw ctxHours sample:", ctxHours.slice(0, 3));
       await loadEvents(); // refresh calendar immediately
       resetForm();
       return;
-    } // ✅ <-- This closing brace was missing!
+    }
 
     // ---------- CREATE SINGLE APPOINTMENT ----------
     const insertData: any = {
@@ -1009,6 +1025,9 @@ const handleDelete = async () => {
       setPendingGroupId(null);
       setSeriesDeleteOpen(false);
 
+      // ✅ Reload everything so availability + appointments reappear
+      await loadEvents();
+
       console.log("✅ Time-off deleted and calendar fully refreshed");
       return;
     }
@@ -1134,7 +1153,7 @@ if (loading) return <div className="p-4 text-gray-500">Loading calendar…</div>
           ref={calendarRef}
           plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin, rrulePlugin]}
           initialView={currentView}
-          timeZone={providerTimezone || "America/New_York"}
+          timeZone="local"
           eventTimeFormat={{
             hour: "numeric",
             minute: "2-digit",

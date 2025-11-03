@@ -34,8 +34,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner"; // ⚡ Add at top of file if not already imported
 import { Label } from "@/components/ui/label";
-import { fromUTCToTZ, fromTZToUTC } from "@/utils/timezone";
-
 
 // ---------------- constants ----------------
 const HOLIDAYS = [
@@ -86,17 +84,11 @@ interface HoursTabProps {
 }
 
 // ---------------- helpers ----------------
-// 🕓 Convert a local time string like "09:00" or "18:30" to UTC-normalized "HH:mm:ss"
-function toUTC(localTime: string, tz: string): string {
+// 🕓 Convert a local time string like "09:00" to a plain "HH:mm:ss" with no timezone math
+function toUTC(localTime: string): string {
   if (!localTime) return localTime;
   const [h, m] = localTime.split(":").map(Number);
-  const now = new Date();
-  now.setHours(h, m, 0, 0);
-  // Convert this local time in provider's tz → UTC "HH:mm:ss"
-  const utcDate = fromTZToUTC(now, tz);
-  const utcH = String(utcDate.getUTCHours()).padStart(2, "0");
-  const utcM = String(utcDate.getUTCMinutes()).padStart(2, "0");
-  return `${utcH}:${utcM}:00`;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:00`;
 }
 
 
@@ -169,6 +161,10 @@ export default function HoursTab({ providerId, onDirtyChange }: HoursTabProps) {
   const [hours, setHours] = useState<Availability[]>([]);
   const [saving, setSaving] = useState(false);
   const [providerTimezone, setProviderTimezone] = useState("America/New_York");
+
+useEffect(() => {
+  if (!providerTimezone) setProviderTimezone("America/New_York");
+}, [providerTimezone]);
 
   const [holidaySelections, setHolidaySelections] = useState<string[]>([]);
   const [dirty, setDirty] = useState(false);
@@ -317,12 +313,9 @@ useEffect(() => {
       if (ctxHours && Array.isArray(ctxHours)) {
         normalizedHours = ctxHours.map((h: any) => ({
           ...h,
-          start_time: fromUTCToTZ(`1970-01-01T${h.start_time}`, providerTimezone)
-            .toTimeString()
-            .slice(0, 5),
-          end_time: fromUTCToTZ(`1970-01-01T${h.end_time}`, providerTimezone)
-            .toTimeString()
-            .slice(0, 5),
+          start_time: h.start_time.slice(0, 5),
+          end_time: h.end_time.slice(0, 5),
+
         }));
         setHours(normalizedHours);
       }
@@ -476,10 +469,12 @@ const saveHours = async () => {
       id: h.id ?? generateId(),
       provider_id: providerId,
       slot_interval: h.slot_interval ?? 30,
-      start_time: toUTC(h.start_time, providerTimezone),
-      end_time: toUTC(h.end_time, providerTimezone),
+      start_time: toUTC(h.start_time),
+      end_time: toUTC(h.end_time),
+
     }));
 
+console.log("🕓 Prepared hours before save:", prepared.slice(0, 3));
 
     const { error: upsertError } = await supabase
       .from("availability")
@@ -632,10 +627,10 @@ const saveHours = async () => {
             const h = Math.floor(i / 4);
             const m = (i % 4) * 15;
             const t = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
-            const label = new Date(`1970-01-01T${t}:00`).toLocaleTimeString([], {
-              hour: "2-digit",
-              minute: "2-digit",
-            });
+            const [hh, mm] = t.split(":").map(Number);
+            const displayHour = ((hh + 11) % 12) + 1;
+            const ampm = hh >= 12 ? "PM" : "AM";
+            const label = `${displayHour}:${mm.toString().padStart(2, "0")} ${ampm}`;
             return { value: t, label };
           });
 
