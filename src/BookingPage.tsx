@@ -196,6 +196,9 @@ export default function BookingPage() {
     const loadAvailability = async () => {
       if (!providerId || !selectedDate) return;
 
+      // 🔄 clear old data so previous day's closure message doesn't linger  
+      setAvailableTimes([]); // clear previous results immediately
+      
       const dayOfWeek = selectedDate.getDay();
 
       const { data: availRows, error } = await supabase
