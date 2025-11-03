@@ -707,10 +707,14 @@ console.log("🔍 Raw ctxHours sample:", ctxHours.slice(0, 3));
     setSaving(true);
 
     if (!selectedDate) return;
-    const start = selectedDate; // already a Date object
+
+    // ✅ Normalize in case it's a string from editingEvent
+    const start =
+      selectedDate instanceof Date ? selectedDate : new Date(selectedDate);
     const svc = services.find((s) => String(s.id) === String(selectedService));
     const svcDuration = svc?.duration_minutes ?? duration;
-    const end = new Date(start.getTime() + svcDuration * 60000);
+    const end =
+      endDate instanceof Date ? endDate : new Date(endDate || start.getTime() + svcDuration * 60000);
 
     // 🧩 1. UPDATE existing appointment or time off
     if (editingEvent) {
@@ -844,7 +848,7 @@ console.log("🔍 Raw ctxHours sample:", ctxHours.slice(0, 3));
       // ✅ Helper: convert local → UTC ISO (prevents +4h shift)
       const toUTC = (date: Date) =>
         new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString();
-      
+
       // ✅ Normalize full-day range before saving
       if (timeOffMode === "day") {
         start.setHours(0, 0, 0, 0);

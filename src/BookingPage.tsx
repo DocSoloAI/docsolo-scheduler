@@ -275,12 +275,24 @@ export default function BookingPage() {
       const mappedOffs = (offs || []).map((o) => {
         const start = new Date(o.start_time);
         const end = new Date(o.end_time);
+
+        // ✅ If marked all_day, expand to full local day boundaries
         if (o.all_day) {
-          start.setHours(0, 0, 0, 0);
-          end.setHours(23, 59, 59, 999);
+          const localStart = new Date(selectedDate);
+          localStart.setHours(0, 0, 0, 0);
+          const localEnd = new Date(selectedDate);
+          localEnd.setHours(23, 59, 59, 999);
+
+          return {
+            start: fromTZToUTC(localStart, providerTimezone),
+            end: fromTZToUTC(localEnd, providerTimezone),
+            all_day: true,
+          };
         }
-        return { start, end, all_day: o.all_day };
+
+        return { start, end, all_day: false };
       });
+
 
       // ✅ Combine appts + offs
       const bookedSlots = [
