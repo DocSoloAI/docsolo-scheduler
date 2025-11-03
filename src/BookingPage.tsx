@@ -304,33 +304,28 @@ export default function BookingPage() {
         };
       });
 
-      // 🟥 Detect full-day offs correctly — stable UTC comparison
+      // 🟥 Detect full-day offs correctly in provider's timezone
       const hasFullDayOff = (offs || []).some((o) => {
         if (!o.all_day) return false;
 
-        // Force UTC interpretation for database times
-        const offStart = new Date(o.start_time + "Z");
-        const offEnd = new Date(o.end_time + "Z");
+        // 🧩 1. Parse Supabase datetimes as UTC, not local
+        const offStartUTC = new Date(o.start_time + "Z"); // "Z" forces UTC parse
+        const offEndUTC = new Date(o.end_time + "Z");
 
-        // Normalize everything to midnight UTC
-        const selectedUTC = new Date(Date.UTC(
-          selectedDate.getUTCFullYear(),
-          selectedDate.getUTCMonth(),
-          selectedDate.getUTCDate()
-        ));
-        const offStartUTC = new Date(Date.UTC(
-          offStart.getUTCFullYear(),
-          offStart.getUTCMonth(),
-          offStart.getUTCDate()
-        ));
-        const offEndUTC = new Date(Date.UTC(
-          offEnd.getUTCFullYear(),
-          offEnd.getUTCMonth(),
-          offEnd.getUTCDate()
-        ));
+        // 🧩 2. Convert those UTC times into provider-local time
+        const offStartLocal = fromUTCToTZ(offStartUTC, providerTimezone);
+        const offEndLocal = fromUTCToTZ(offEndUTC, providerTimezone);
 
-        // ✅ True if selected day falls within the off-day range (pure date-level compare)
-        return selectedUTC >= offStartUTC && selectedUTC <= offEndUTC;
+        // 🧩 3. Normalize both to YYYY-MM-DD for safe date-only compare
+        const offStartStr = offStartLocal.toISOString().split("T")[0];
+        const offEndStr = offEndLocal.toISOString().split("T")[0];
+
+        // selectedDate is already local → normalize too
+        const selectedLocal = fromUTCToTZ(selectedDate, providerTimezone);
+        const selectedStr = selectedLocal.toISOString().split("T")[0];
+
+        // ✅ 4. Compare only date parts (no time drift possible)
+        return selectedStr >= offStartStr && selectedStr <= offEndStr;
       });
 
       if (hasFullDayOff) {
@@ -340,6 +335,7 @@ export default function BookingPage() {
         ]);
         return;
       }
+
 
 
 
