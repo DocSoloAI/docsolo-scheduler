@@ -196,7 +196,7 @@ export default function BookingPage() {
     let isActive = true; // ✅ cancel stale loads if date changes mid-request
 
     const loadAvailability = async () => {
-      if (!providerId || !selectedDate) return;
+      if (!providerId || !selectedDate || !providerTimezone) return;
 
       setAvailableTimes([]); // clear previous results immediately
 
@@ -277,31 +277,27 @@ export default function BookingPage() {
       if (offErr) {
         console.error("❌ time_off fetch error:", offErr);
       }
+      
+      if (offErr) return; // stop if the query failed
 
       console.log("🟩 Time-off rows fetched:", offs);
 
       if (!isActive) return;
 
-      console.log("🟩 Time-off rows fetched:", offs);
-
-      if (!isActive) return;
-
-console.log("🟩 Time-off rows fetched:", offs);
-offs?.forEach((o) =>
-  console.log("off_date type/value:", typeof o.off_date, o.off_date)
-);
+//console.log("🟩 Time-off rows fetched:", offs);
+//offs?.forEach((o) =>
+  //console.log("off_date type/value:", typeof o.off_date, o.off_date)
+//);
 
     // ✅ Detect full-day off (supports off_date or legacy start/end)
     const hasFullDayOff = (offs || []).some((o) => {
       if (!o || !o.all_day) return false;
 
-      // If there's an explicit off_date, match that
       if (o.off_date) {
         const selectedDay = selectedDate.toISOString().slice(0, 10);
         return o.off_date === selectedDay;
       }
 
-      // Otherwise, fallback to time-based logic
       if (o.start_time && o.end_time) {
         const offStartDay = o.start_time.slice(0, 10);
         const offEndDay = o.end_time.slice(0, 10);
@@ -314,11 +310,16 @@ offs?.forEach((o) =>
 
     if (hasFullDayOff) {
       console.log("🚫 Full-day OFF detected for", selectedDate.toDateString());
+
+      // 🟢 Explicitly clear and show message
       setAvailableTimes([
-        "No appointments available. Either the office is closed, or fully booked.",
+        "No appointments available. The office is closed or fully booked for this date.",
       ]);
+
+      // 🚫 Ensure no further code runs
       return;
     }
+
 
     // ✅ Normalize time_off for partial-day logic
     const mappedOffs = (offs || []).map((o) => {
