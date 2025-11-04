@@ -271,10 +271,10 @@ export default function BookingPage() {
         .from("time_off")
         .select("start_time, end_time, all_day, reason, off_date")
         .eq("provider_id", providerId)
-        .or(`
-          off_date.eq.${selectedDate.toISOString().slice(0, 10)},
-          and(start_time.lte.${endOfDayUTC.toISOString()},end_time.gte.${startOfDayUTC.toISOString()})
-        `);
+        .or(
+          `off_date.eq.${selectedDate.toISOString().slice(0, 10)},and(start_time.lte.${endOfDayUTC.toISOString()},end_time.gte.${startOfDayUTC.toISOString()})`
+        );
+
 
       if (offErr) {
         console.error("❌ time_off fetch error:", offErr);
