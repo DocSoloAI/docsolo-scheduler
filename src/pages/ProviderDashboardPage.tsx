@@ -7,10 +7,11 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import HoursTab from "@/components/provider/HoursTab";
 import CalendarTab from "@/components/provider/CalendarTab";
 import ServicesTab from "@/components/provider/ServicesTab";
-import EmailsTab from "@/components/provider/EmailsTab";
+import SettingsTab from "@/components/provider/SettingsTab";
 import { SettingsProvider } from "@/context/SettingsContext";
 import { Button } from "@/components/ui/button";
 import PatientsTab from "@/components/provider/PatientsTab";
+import { toast } from "react-hot-toast";
 
 export default function ProviderSettingsPage() {
   const [activeTab, setActiveTab] = useState("calendar");
@@ -39,14 +40,25 @@ export default function ProviderSettingsPage() {
         setProviderId(user.id);
         setProviderEmail(user.email ?? null);
 
+        // ✅ Fetch provider info including is_active flag
         const { data: providerRow, error } = await supabase
           .from("providers")
-          .select("office_name")
+          .select("office_name, is_active")
           .eq("id", user.id)
           .single();
 
         if (!error && providerRow) {
+          // 🔒 If provider is inactive, sign them out
+          if (providerRow.is_active === false) {
+            toast.error("Your account has been deactivated. Please contact support.");
+            await supabase.auth.signOut();
+            navigate("/");
+            return;
+          }
+
           setOfficeName(providerRow.office_name || "");
+        } else if (error) {
+          console.error("❌ Error fetching provider info:", error.message);
         }
       }
     };
@@ -145,8 +157,9 @@ export default function ProviderSettingsPage() {
                 <TabsTrigger value="patients">Patients</TabsTrigger>
                 <TabsTrigger value="hours">Hours</TabsTrigger>
                 <TabsTrigger value="services">Services</TabsTrigger>
-                <TabsTrigger value="emails">Emails</TabsTrigger>
+                <TabsTrigger value="settings">Settings</TabsTrigger>
               </TabsList>
+
 
               <TabsContent value="calendar">
                 <CalendarTab providerId={providerId} />
@@ -170,8 +183,8 @@ export default function ProviderSettingsPage() {
                 />
               </TabsContent>
 
-              <TabsContent value="emails">
-                <EmailsTab providerId={providerId} />
+              <TabsContent value="settings">
+                <SettingsTab providerId={providerId} />
               </TabsContent>
             </Tabs>
           </SettingsProvider>

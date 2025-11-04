@@ -40,6 +40,16 @@ import {
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { toast } from "react-hot-toast";
 
+import { formatInTimeZone, toZonedTime } from "date-fns-tz";
+
+// ✅ Convert a local date into UTC ISO string, respecting provider’s timezone
+function toUTC(date: Date, timeZone: string): string {
+  const zoned = toZonedTime(date, timeZone);
+  const offsetMinutes = zoned.getTimezoneOffset();
+  const utc = new Date(zoned.getTime() - offsetMinutes * 60000);
+  return utc.toISOString();
+}
+
 const isDev = import.meta.env.DEV;
 
 // === Email helper ===
@@ -398,18 +408,27 @@ async function loadAvailabilityOverrides() {
       if (apptError) throw new Error(apptError.message);
       if (isDev) console.log("📋 Appointments loaded:", appts?.length ?? 0);
 
+      // 🟩 Corrected appointment mapping
       const mappedAppts =
         appts?.map((appt: any) => {
           const patient = Array.isArray(appt.patients)
             ? appt.patients[0]
             : appt.patients;
           const serviceColor = appt.services?.color || "#3b82f6";
-          const color =
-            appt.status === "time_off" ? "#fca5a5" : serviceColor;
+          const color = appt.status === "time_off" ? "#fca5a5" : serviceColor;
 
-          // 🕐 Keep times as JS Dates (FullCalendar will handle timezone)
-          const startFixed = new Date(appt.start_time);
-          const endFixed   = new Date(appt.end_time);
+          // ✅ Parse as UTC but interpret the TIME VALUES as local
+          // "2025-11-07 09:00:00+00" should become Nov 7, 2025 at 9:00 AM local
+          const parseAsLocal = (utcString: string) => {
+            const iso = utcString.replace(" ", "T").replace("+00", "");
+            const [datePart, timePart] = iso.split("T");
+            const [year, month, day] = datePart.split("-").map(Number);
+            const [hour, minute, second] = timePart.split(":").map(Number);
+            return new Date(year, month - 1, day, hour, minute, second || 0);
+          };
+
+          const startFixed = parseAsLocal(appt.start_time);
+          const endFixed = parseAsLocal(appt.end_time);
 
           return {
             id: appt.id,
@@ -417,7 +436,7 @@ async function loadAvailabilityOverrides() {
               appt.status === "time_off"
                 ? "OFF"
                 : `${patient?.first_name ?? ""} ${patient?.last_name ?? ""}`.trim(),
-            start: startFixed, // ✅ no .toISOString()
+            start: startFixed,
             end: endFixed,
             backgroundColor: color,
             borderColor: color,
@@ -431,6 +450,7 @@ async function loadAvailabilityOverrides() {
             },
           };
         }) ?? [];
+
 
         // ---------- Load Time-Off ----------
         const { data: offs, error: offError } = await supabase
@@ -523,25 +543,26 @@ async function loadAvailabilityOverrides() {
           const api = calendarRef.current.getApi();
           api.removeAllEvents();
 
-          // 🧠 Diagnostic: show what's about to be added
-          if (isDev) console.log(
-            "🧠 Adding events to calendar:",
-            allEvents.map((e: any) => ({
-              id: e.id,
-              title: e.title ?? "(no title)",
-              start: e.start ?? e.startTime ?? "(no start)",
-              end: e.end ?? e.endTime ?? "(no end)",
-              status: e.extendedProps?.status ?? "(none)",
-            }))
-          );
-
-          allEvents.forEach((e) => api.addEvent(e));
+          // 🔎 Deep diagnostic — log every event with actual Date objects
+          console.groupCollapsed("🧠 FullCalendar events being added:");
+          allEvents.forEach((e: any) => {
+            console.log(
+              `🗓️ ${e.title || "(no title)"} | start:`,
+              e.start,
+              "| end:",
+              e.end,
+              "| type:",
+              e.extendedProps?.status
+            );
+            api.addEvent(e);
+          });
+          console.groupEnd();
         }
 
+        // ✅ Keep React state in sync so prop-based re-renders don’t wipe changes
+        setEvents(allEvents.filter(Boolean) as AppointmentEvent[]);
 
         // 🧠 Skip setEvents — avoids duplicate time-off rendering
-
-
         if (isDev) console.log("✅ Calendar reloaded:", allEvents.length, "total events");
         const hasAvail = allEvents.some((e: any) => e.extendedProps?.status === "availability_override");
         if (isDev) console.log("🔎 Availability event detected:", hasAvail);
@@ -683,8 +704,6 @@ async function loadAvailabilityOverrides() {
 
 
 
-
-
   const handleEventClick = async (info: any) => {
     const event = info.event;
     const status = event.extendedProps?.status;
@@ -788,18 +807,14 @@ async function loadAvailabilityOverrides() {
         const start = info.event.start;
         const end = info.event.end;
 
-        // ✅ Convert to UTC so times stay correct after drag
-        const toUTC = (d: Date) =>
-          new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString();
-
         try {
           if (isTimeOff) {
             // 🟥 Move a time-off block
             const { error: offErr } = await supabase
               .from("time_off")
               .update({
-                start_time: toUTC(start),
-                end_time: toUTC(end),
+                start_time: toUTC(start, providerTimezone),
+                end_time: toUTC(end, providerTimezone),
               })
               .eq("id", info.event.id);
 
@@ -814,8 +829,9 @@ async function loadAvailabilityOverrides() {
           const { data: updated, error } = await supabase
             .from("appointments")
             .update({
-              start_time: toUTC(start),
-              end_time: toUTC(end),
+              start_time: toUTC(start, providerTimezone),
+              end_time: toUTC(end, providerTimezone),
+
             })
             .eq("id", info.event.id)
             .select(
@@ -848,9 +864,6 @@ async function loadAvailabilityOverrides() {
         ? endDate
         : new Date(endDate || start.getTime() + svcDuration * 60000);
 
-    const toUTC = (d: Date) =>
-      new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString();
-
     try {
       // 🧩 1️⃣ UPDATE existing appointment or time off
       if (editingEvent) {
@@ -871,8 +884,8 @@ async function loadAvailabilityOverrides() {
             updateData.start_time = null;
             updateData.end_time = null;
           } else {
-            updateData.start_time = toUTC(start);
-            updateData.end_time = toUTC(end);
+            updateData.start_time = toUTC(start, providerTimezone);
+            updateData.end_time = toUTC(end, providerTimezone);
             updateData.off_date = null;
           }
 
@@ -894,8 +907,8 @@ async function loadAvailabilityOverrides() {
         const { data: updated, error } = await supabase
           .from("appointments")
           .update({
-            start_time: toUTC(start),
-            end_time: toUTC(end),
+            start_time: toUTC(start, providerTimezone),
+            end_time: toUTC(end, providerTimezone),
             status: "booked",
             patient_id: selectedPatient,
             service_id: selectedService,
@@ -955,23 +968,24 @@ async function loadAvailabilityOverrides() {
                 frequency: repeatFrequency,
                 unit: repeatUnit,
                 reason: timeOffReason || "Repeating time off",
-                start_date: toUTC(start),
+                start_date: toUTC(start, providerTimezone),
               },
+
             });
           } else {
             // 🕓 partial repeating off
             const endCurrent = new Date(current.getTime() + baseDuration * 60000);
             repeats.push({
               provider_id: providerId,
-              start_time: toUTC(current),
-              end_time: toUTC(endCurrent),
+              start_time: toUTC(current, providerTimezone),
+              end_time: toUTC(endCurrent, providerTimezone),
               reason: timeOffReason || "Repeating time off",
               meta_repeat: {
                 group_id: groupId,
                 frequency: repeatFrequency,
                 unit: repeatUnit,
                 reason: timeOffReason || "Repeating time off",
-                start_date: toUTC(start),
+                start_date: toUTC(start, providerTimezone),
               },
             });
           }
@@ -1040,8 +1054,8 @@ async function loadAvailabilityOverrides() {
         if (isFullDay) {
           insertData.off_date = selectedDate.toISOString().slice(0, 10);
         } else {
-          insertData.start_time = toUTC(start);
-          insertData.end_time = toUTC(end);
+          insertData.start_time = toUTC(start, providerTimezone);
+          insertData.end_time = toUTC(end, providerTimezone);
         }
 
         const { data: newOff, error: offErr } = await supabase
@@ -1076,29 +1090,35 @@ async function loadAvailabilityOverrides() {
         return;
       }
 
-      // 🩵 5️⃣ CREATE new appointment
+      // 🩵 5️⃣ CREATE new appointment (fixed local-time handling)
       const { data: newAppt, error: apptErr } = await supabase
         .from("appointments")
         .insert([
           {
             provider_id: providerId,
-            start_time: toUTC(start),
-            end_time: toUTC(end),
+            // 🕓 FullCalendar already gives a local Date; do NOT convert again
+            start_time: toUTC(start, providerTimezone), // ✅ Convert properly
+            end_time: toUTC(end, providerTimezone),     // ✅ Convert properly
             status: "booked",
             patient_id: selectedPatient,
             service_id: selectedService,
           },
         ])
-        .select("id, start_time, patients(first_name,last_name,email), services(name)")
+        .select(
+          "id, start_time, patients(first_name,last_name,email), services(name)"
+        )
         .single();
 
       if (apptErr) throw apptErr;
 
+      // ✅ Refresh the calendar and send notifications
       await loadEvents();
       resetForm();
       if (newAppt) await sendDualEmail("confirmation", providerId, newAppt);
       toast.success("Appointment saved ✅");
       setSaving(false);
+      return;
+
     } catch (err: any) {
       console.error("❌ handleSave failed:", err);
       toast.error(`Error saving: ${err.message}`);
@@ -1674,10 +1694,8 @@ if (loading) return <div className="p-4 text-gray-500">Loading calendar…</div>
                         type="time"
                         value={
                           selectedDate
-                            ? (() => {
-                                const d = new Date(selectedDate);
-                                return d.toTimeString().slice(0, 5);
-                              })()
+                          ? formatInTimeZone(selectedDate, providerTimezone, "HH:mm")
+
                             : ""
                         }
                         onChange={(e) => {
@@ -1695,21 +1713,24 @@ if (loading) return <div className="p-4 text-gray-500">Loading calendar…</div>
                         type="time"
                         value={
                           endDate
-                            ? (() => {
-                                const d = new Date(endDate);
-                                return d.toTimeString().slice(0, 5);
-                              })()
+                            ? formatInTimeZone(endDate, providerTimezone, "HH:mm")
                             : ""
                         }
                         onChange={(e) => {
                           const [hours, minutes] = e.target.value.split(":").map(Number);
                           const updated = endDate ? new Date(endDate) : new Date();
-                          updated.setHours(hours, minutes, 0, 0);
-                          setEndDate(updated);
+
+                          // 🕓 interpret selected time in provider's local timezone, then convert to UTC
+                          const zoned = new Date(updated);
+                          zoned.setHours(hours, minutes, 0, 0);
+                          const utc = toUTC(zoned, providerTimezone);
+
+                          setEndDate(new Date(utc)); // ✅ convert ISO string → Date object
                           setIsDirty(true);
                         }}
                       />
                     </div>
+
                   </div>
                   <div>
                     <Label>Note (optional)</Label>
@@ -1748,40 +1769,45 @@ if (loading) return <div className="p-4 text-gray-500">Loading calendar…</div>
                           <Label>Start Time</Label>
                           <Input
                             type="time"
-                              value={
-                                selectedDate
-                                  ? (() => {
-                                      const d = new Date(selectedDate);
-                                      return d.toTimeString().slice(0, 5); // ✅ local HH:MM
-                                    })()
-                                  : ""
-                              }
+                            value={
+                              selectedDate
+                                ? formatInTimeZone(selectedDate, providerTimezone, "HH:mm")
+                                : ""
+                            }
                             onChange={(e) => {
                               const [hours, minutes] = e.target.value.split(":").map(Number);
                               const updated = selectedDate ? new Date(selectedDate) : new Date();
-                              updated.setHours(hours, minutes, 0, 0);
-                              setSelectedDate(updated); // ✅ use 'updated', not 'newDate'
+
+                              // 🕓 interpret selected time in provider's local timezone, then convert to UTC
+                              const zoned = new Date(updated);
+                              zoned.setHours(hours, minutes, 0, 0);
+                              const utc = toUTC(zoned, providerTimezone);
+
+                              setSelectedDate(new Date(utc)); // ✅ convert ISO string → Date object
                               markDirty();
                             }}
                           />
                         </div>
+
                         <div>
                           <Label>End Time</Label>
                           <Input
                             type="time"
                             value={
                               endDate
-                                ? (() => {
-                                    const d = new Date(endDate);
-                                    return d.toTimeString().slice(0, 5); // ✅ local HH:MM
-                                  })()
+                                ? formatInTimeZone(endDate, providerTimezone, "HH:mm")
                                 : ""
                             }
                             onChange={(e) => {
                               const [hours, minutes] = e.target.value.split(":").map(Number);
                               const updated = endDate ? new Date(endDate) : new Date();
-                              updated.setHours(hours, minutes, 0, 0);
-                              setEndDate(updated); // ✅ update endDate state
+
+                              // 🕓 interpret selected time in provider's local timezone, then convert to UTC
+                              const zoned = new Date(updated);
+                              zoned.setHours(hours, minutes, 0, 0);
+                              const utc = toUTC(zoned, providerTimezone);
+
+                              setEndDate(new Date(utc)); // ✅ converts ISO string → Date object
                               setIsDirty(true);
                             }}
                           />
