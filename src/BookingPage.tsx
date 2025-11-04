@@ -300,25 +300,26 @@ export default function BookingPage() {
 
       if (!isActive) return;
 
-    // ✅ Detect full-day off (supports both off_date and time-based rows)
+    // ✅ Detect full-day off (supports off_date or legacy start/end)
     const hasFullDayOff = (offs || []).some((o) => {
       if (!o || !o.all_day) return false;
 
-      // ✅ Safely determine which date to compare
-      let offDay: string | null = null;
-
+      // If there's an explicit off_date, match that
       if (o.off_date) {
-        offDay = o.off_date;
-      } else if (o.start_time && typeof o.start_time === "string") {
-        offDay = o.start_time.slice(0, 10);
+        const selectedDay = selectedDate.toISOString().slice(0, 10);
+        return o.off_date === selectedDay;
       }
 
-      if (!offDay) return false;
+      // Otherwise, fallback to time-based logic
+      if (o.start_time && o.end_time) {
+        const offStartDay = o.start_time.slice(0, 10);
+        const offEndDay = o.end_time.slice(0, 10);
+        const selectedDay = selectedDate.toISOString().slice(0, 10);
+        return selectedDay >= offStartDay && selectedDay <= offEndDay;
+      }
 
-      const selectedDay = selectedDate.toISOString().slice(0, 10);
-      return selectedDay === offDay;
+      return false;
     });
-
 
     if (hasFullDayOff) {
       console.log("🚫 Full-day OFF detected for", selectedDate.toDateString());
