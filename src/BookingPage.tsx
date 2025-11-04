@@ -271,63 +271,51 @@ export default function BookingPage() {
         .from("time_off")
         .select("start_time, end_time, all_day, reason, off_date")
         .eq("provider_id", providerId)
-        .or(`off_date.eq.${selectedDate.toISOString().slice(0,10)},and(start_time.lte.${endOfDayUTC.toISOString()},end_time.gte.${startOfDayUTC.toISOString()})`);
-
+        .or(
+          `off_date.eq.${selectedDate.toISOString().slice(0, 10)},and(start_time.lte.${endOfDayUTC.toISOString()},end_time.gte.${startOfDayUTC.toISOString()})`
+        );
 
       if (offErr) {
         console.error("❌ time_off fetch error:", offErr);
       }
-      
-      if (offErr) return; // stop if the query failed
+      if (offErr) return; // 🚫 stop if the query failed
 
       console.log("🟩 Time-off rows fetched:", offs);
-
       if (!isActive) return;
 
-//console.log("🟩 Time-off rows fetched:", offs);
-//offs?.forEach((o) =>
-  //console.log("off_date type/value:", typeof o.off_date, o.off_date)
-//);
+      // ✅ Detect full-day off (supports off_date or legacy start/end)
+      const hasFullDayOff = (offs || []).some((o) => {
+        if (!o || !o.all_day) return false;
 
-    // ✅ Detect full-day off (supports off_date or legacy start/end)
-    const hasFullDayOff = (offs || []).some((o) => {
-      if (!o || !o.all_day) return false;
+        if (o.off_date) {
+          const selectedDay = selectedDate.toISOString().slice(0, 10);
+          return o.off_date === selectedDay;
+        }
 
-      if (o.off_date) {
-        const selectedDay = selectedDate.toISOString().slice(0, 10);
-        return o.off_date === selectedDay;
+        if (o.start_time && o.end_time) {
+          const offStartDay = o.start_time.slice(0, 10);
+          const offEndDay = o.end_time.slice(0, 10);
+          const selectedDay = selectedDate.toISOString().slice(0, 10);
+          return selectedDay >= offStartDay && selectedDay <= offEndDay;
+        }
+
+        return false;
+      });
+
+      if (hasFullDayOff) {
+        console.log("🚫 Full-day OFF detected for", selectedDate.toDateString());
+        setAvailableTimes([
+          "No appointments available. The office is closed or fully booked for this date.",
+        ]);
+        return; // ✅ Stop immediately so message isn't overwritten
       }
 
-      if (o.start_time && o.end_time) {
-        const offStartDay = o.start_time.slice(0, 10);
-        const offEndDay = o.end_time.slice(0, 10);
-        const selectedDay = selectedDate.toISOString().slice(0, 10);
-        return selectedDay >= offStartDay && selectedDay <= offEndDay;
-      }
-
-      return false;
-    });
-
-    if (hasFullDayOff) {
-      console.log("🚫 Full-day OFF detected for", selectedDate.toDateString());
-
-      // 🟢 Explicitly clear and show message
-      setAvailableTimes([
-        "No appointments available. The office is closed or fully booked for this date.",
-      ]);
-
-      // 🚫 Ensure no further code runs
-      return;
-    }
-
-
-    // ✅ Normalize time_off for partial-day logic
-    const mappedOffs = (offs || []).map((o) => {
-      const start = o.start_time ? new Date(o.start_time) : null;
-      const end = o.end_time ? new Date(o.end_time) : null;
-      return { start, end, all_day: !!o.all_day };
-    });
-
+      // ✅ Normalize time_off for partial-day logic
+      const mappedOffs = (offs || []).map((o) => {
+        const start = o.start_time ? new Date(o.start_time) : null;
+        const end = o.end_time ? new Date(o.end_time) : null;
+        return { start, end, all_day: !!o.all_day };
+      });
 
       // ✅ Combine appointments + time_off
       const bookedSlots = [
@@ -345,7 +333,6 @@ export default function BookingPage() {
       const freeSlots = allSlots
         .filter((slot) => {
           return !bookedSlots.some((b) => {
-            // ✅ Guard against null start/end
             const sameDay =
               b.all_day &&
               b.start &&
@@ -355,7 +342,6 @@ export default function BookingPage() {
             return sameDay || overlaps;
           });
         })
-
         .filter((slot) => {
           if (selectedDate.toDateString() !== now.toDateString()) return true;
           return slot.date > now;
@@ -380,6 +366,7 @@ export default function BookingPage() {
       isActive = false;
     };
   }, [providerId, selectedDate]);
+
 
 
 
