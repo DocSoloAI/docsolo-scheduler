@@ -455,7 +455,7 @@ console.log("🔍 Raw ctxHours sample:", ctxHours.slice(0, 3));
         }));
 
 
-    console.log("🩵 Base availability preview:", baseAvailability);
+    //console.log("🩵 Base availability preview:", baseAvailability);
 
     // ✅ Merge everything together into one master array
     const allEvents = [
