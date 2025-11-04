@@ -40,6 +40,8 @@ import {
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { toast } from "react-hot-toast";
 
+const isDev = import.meta.env.DEV;
+
 // === Email helper ===
 async function sendDualEmail(
   templateType: "confirmation" | "update" | "cancellation" | "reminder",
@@ -87,55 +89,56 @@ async function sendDualEmail(
     providerPhone: provider?.phone || "",
   };
 
-  if (patient?.email) {
-    const { error: patientError } = await supabase.functions.invoke(
-      "sendTemplatedEmail",
-      {
-        body: { templateType, to: patient.email, providerId, appointmentData },
-      }
-    );
-    if (patientError) {
-      console.error(
-        `❌ Patient ${templateType} email error:`,
-        patientError.message
+  // 🩵 Patient email (non-blocking)
+  try {
+    if (patient?.email) {
+      const { error: patientError } = await supabase.functions.invoke(
+        "sendTemplatedEmail",
+        {
+          body: { templateType, to: patient.email, providerId, appointmentData },
+        }
       );
+      if (patientError) throw patientError;
     }
+  } catch (err: any) {
+    console.warn("⚠️ Non-blocking patient email error:", err.message);
   }
 
-  if (provider?.email) {
-    const providerTemplateType =
-      templateType === "confirmation"
-        ? "provider_confirmation"
-        : templateType === "update"
-        ? "provider_update"
-        : templateType === "cancellation"
-        ? "provider_cancellation"
-        : templateType;
+  // 💼 Provider email (non-blocking)
+  try {
+    if (provider?.email) {
+      const providerTemplateType =
+        templateType === "confirmation"
+          ? "provider_confirmation"
+          : templateType === "update"
+          ? "provider_update"
+          : templateType === "cancellation"
+          ? "provider_cancellation"
+          : templateType;
 
-    const { error: provMailError } = await supabase.functions.invoke(
-      "sendTemplatedEmail",
-      {
-        body: {
-          templateType: providerTemplateType,
-          to: provider.email,
-          providerId,
-          appointmentData,
-        },
-      }
-    );
-
-    if (provMailError) {
-      console.error(
-        `❌ Provider ${providerTemplateType} email error:`,
-        provMailError.message
+      const { error: provMailError } = await supabase.functions.invoke(
+        "sendTemplatedEmail",
+        {
+          body: {
+            templateType: providerTemplateType,
+            to: provider.email,
+            providerId,
+            appointmentData,
+          },
+        }
       );
+      if (provMailError) throw provMailError;
     }
+  } catch (err: any) {
+    console.warn("⚠️ Non-blocking provider email error:", err.message);
   }
 
-  console.log(
-    `✅ ${templateType} emails requested for ${patient?.email} + provider`
-  );
+  if (isDev)
+    console.log(
+      `✅ ${templateType} emails requested for ${patient?.email || "no-patient"} + provider`
+    );
 }
+
 
 interface AppointmentEvent {
   id: string;
@@ -149,9 +152,22 @@ interface AppointmentEvent {
   extendedProps?: any;
 }
 
+interface AppointmentRow {
+  id: string;
+  start_time: string;
+  end_time: string;
+  status: string;
+  patient_id?: string;
+  service_id?: string;
+  patient_note?: string | null;
+  patients?: { first_name: string; last_name: string; email?: string }[];
+  services?: { name: string; color?: string }[];
+}
+
+
 export default function CalendarTab({ providerId }: { providerId: string }) {
   const { availability: ctxHours } = useSettings();
-  console.log("🧩 CalendarTab ctxHours on mount:", ctxHours);
+  if (isDev) console.log("🧩 CalendarTab ctxHours on mount:", ctxHours);
   const [providerTimezone, setProviderTimezone] = useState("America/New_York");
 
   const [currentView] = useState("timeGridWeek");
@@ -160,7 +176,7 @@ export default function CalendarTab({ providerId }: { providerId: string }) {
   );
 
   const { services, patients, loading, reload, availability } = useSettings();
-  console.log("🕓 Provider availability from context:", availability);
+  if (isDev) console.log("🕓 Provider availability from context:", availability);
   const [isDirty, setIsDirty] = useState(false);
   const [showDiscardDialog, setShowDiscardDialog] = useState(false);
 
@@ -271,7 +287,7 @@ const tryGoto = () => {
   const api = calendarRef.current?.getApi?.();
   if (api) {
     api.gotoDate(target);
-    console.log("📅 Navigated to stored date:", target.toISOString());
+    if (isDev) console.log("📅 Navigated to stored date:", target.toISOString());
     localStorage.removeItem("calendarFocusDate");
     clearInterval(timer);
 
@@ -308,7 +324,7 @@ const tryGoto = () => {
 // 🩵 Load provider one-off availability overrides (read-only background)
 async function loadAvailabilityOverrides() {
   // 🔍 Track when this runs
-  console.log("🩵 loadAvailabilityOverrides() triggered for provider:", providerId);
+  if (isDev) console.log("🩵 loadAvailabilityOverrides() triggered for provider:", providerId);
 
   if (!providerId) {
     console.warn("⚠️ Skipping overrides load — providerId missing");
@@ -329,7 +345,7 @@ async function loadAvailabilityOverrides() {
   console.log("🧩 Raw overrides from DB:", data);
 
   if (!data || data.length === 0) {
-    console.log("🩶 No active overrides found for this provider.");
+    if (isDev) console.log("🩶 No active overrides found for this provider.");
     return [];
   }
 
@@ -358,7 +374,7 @@ async function loadAvailabilityOverrides() {
   });
 
 
-  console.log("🩵 Overrides mapped to calendar events:", mapped);
+  if (isDev) console.log("🩵 Overrides mapped to calendar events:", mapped);
 
   return mapped;
 }
@@ -373,14 +389,14 @@ async function loadAvailabilityOverrides() {
         .from("appointments")
         .select(`
           id, start_time, end_time, status, patient_id, service_id, patient_note,
-          patients ( first_name, last_name ),
+          patients ( first_name, last_name, email ),
           services ( name, color )
         `)
         .eq("provider_id", providerId)
-        .not("status", "eq", "cancelled"); // ✅ show all non-cancelled appointments
+        .not("status", "eq", "cancelled") as unknown as { data: AppointmentRow[]; error: any };
 
       if (apptError) throw new Error(apptError.message);
-      console.log("📋 Appointments loaded:", appts?.length ?? 0);
+      if (isDev) console.log("📋 Appointments loaded:", appts?.length ?? 0);
 
       const mappedAppts =
         appts?.map((appt: any) => {
@@ -470,11 +486,11 @@ async function loadAvailabilityOverrides() {
 
 
         // ---------- Merge & Render ----------
-        console.log("🩵 Loading overrides before merge...");
+        if (isDev) console.log("🩵 Loading overrides before merge...");
         const overrides = await loadAvailabilityOverrides();
-        console.log("🩵 Overrides returned to loadEvents:", overrides.length);
+        if (isDev) console.log("🩵 Overrides returned to loadEvents:", overrides.length);
 
-        console.log("🔍 Raw ctxHours sample:", ctxHours?.slice(0, 3));
+        if (isDev) console.log("🔍 Raw ctxHours sample:", ctxHours?.slice(0, 3));
 
         const baseAvailability = (ctxHours || [])
           .filter((a: any) => a.is_active !== false)
@@ -500,7 +516,7 @@ async function loadAvailabilityOverrides() {
 
 
         // 🧩 Merged total events before render
-        console.log("🧩 Merged total events before render:", allEvents.length);
+        if (isDev) console.log("🧩 Merged total events before render:", allEvents.length);
 
         // ✅ Force FullCalendar to reload fresh events
         if (calendarRef.current) {
@@ -508,7 +524,7 @@ async function loadAvailabilityOverrides() {
           api.removeAllEvents();
 
           // 🧠 Diagnostic: show what's about to be added
-          console.log(
+          if (isDev) console.log(
             "🧠 Adding events to calendar:",
             allEvents.map((e: any) => ({
               id: e.id,
@@ -526,18 +542,18 @@ async function loadAvailabilityOverrides() {
         // 🧠 Skip setEvents — avoids duplicate time-off rendering
 
 
-        console.log("✅ Calendar reloaded:", allEvents.length, "total events");
+        if (isDev) console.log("✅ Calendar reloaded:", allEvents.length, "total events");
         const hasAvail = allEvents.some((e: any) => e.extendedProps?.status === "availability_override");
-        console.log("🔎 Availability event detected:", hasAvail);
+        if (isDev) console.log("🔎 Availability event detected:", hasAvail);
 
-            console.log("🧩 First few events:", allEvents.slice(0, 3));
-            console.log(`✅ Calendar reloaded: ${allEvents.length} total events`);
+            if (isDev) console.log("🧩 First few events:", allEvents.slice(0, 3));
+            if (isDev) console.log(`✅ Calendar reloaded: ${allEvents.length} total events`);
 
 
 
             // ✅ Debug logs
-            console.log("🧩 First few events:", allEvents.slice(0, 3));
-            console.log(`✅ Calendar reloaded: ${allEvents.length} total events`);
+            if (isDev) console.log("🧩 First few events:", allEvents.slice(0, 3));
+            if (isDev) console.log(`✅ Calendar reloaded: ${allEvents.length} total events`);
             } catch (err: any) {
               console.error("❌ loadEvents failed:", err.message);
             }
@@ -546,11 +562,11 @@ async function loadAvailabilityOverrides() {
 
   useEffect(() => {
     if (!providerId || !ctxHours || ctxHours.length === 0) {
-      console.log("🕓 Skipping loadEvents — missing providerId or ctxHours not ready");
+      if (isDev) console.log("🕓 Skipping loadEvents — missing providerId or ctxHours not ready");
       return;
     }
 
-    console.log("🚀 Running loadEvents with ctxHours count:", ctxHours.length);
+    if (isDev) console.log("🚀 Running loadEvents with ctxHours count:", ctxHours.length);
     loadEvents();
 
 
@@ -566,7 +582,7 @@ async function loadAvailabilityOverrides() {
           filter: `provider_id=eq.${providerId}`,
         },
         async () => {
-          console.log("🔄 Realtime: appointments changed → refreshing calendar");
+          if (isDev) console.log("🔄 Realtime: appointments changed → refreshing calendar");
           await loadEvents();
         }
       )
@@ -579,7 +595,7 @@ async function loadAvailabilityOverrides() {
           filter: `provider_id=eq.${providerId}`,
         },
         async () => {
-          console.log("🔄 Realtime: time_off changed → refreshing calendar");
+          if (isDev) console.log("🔄 Realtime: time_off changed → refreshing calendar");
           await loadEvents();
         }
       )
@@ -633,7 +649,7 @@ async function loadAvailabilityOverrides() {
       setEndDate(end);
       setModalOpen(true);
 
-      console.log("🌞 All-day block clicked:", start.toString());
+      if (isDev) console.log("🌞 All-day block clicked:", start.toString());
       return;
     }
 
@@ -644,7 +660,7 @@ async function loadAvailabilityOverrides() {
     setSelectedDate(start);
     setEndDate(end);
     setModalOpen(true);
-    console.log("🕐 Time block clicked:", start.toString());
+    if (isDev) console.log("🕐 Time block clicked:", start.toString());
   };
 
 
@@ -655,7 +671,7 @@ async function loadAvailabilityOverrides() {
     setIsTimeOff(true);
     setTimeOffMode("hours");
 
-    console.log("🕐 Raw select:", info.start, "→", info.end);
+    if (isDev) console.log("🕐 Raw select:", info.start, "→", info.end);
 
     const start = new Date(info.start);
     const end = new Date(info.end);
@@ -1161,14 +1177,14 @@ const handleDelete = async () => {
           .delete()
           .eq("provider_id", providerId)
           .eq("meta_repeat->>group_id", groupId);
-        console.log("🗑️ Deleted entire repeating series", groupId);
+        if (isDev) console.log("🗑️ Deleted entire repeating series", groupId);
       } else {
         await supabase
           .from("time_off")
           .delete()
           .eq("id", editingEvent.id)
           .eq("provider_id", providerId);
-        console.log("🗑️ Deleted single time-off block");
+        if (isDev) console.log("🗑️ Deleted single time-off block");
       }
 
       // 3️⃣ Clear and reload the calendar
@@ -1211,7 +1227,7 @@ const handleDelete = async () => {
       // ✅ Reload everything so availability + appointments reappear
       await loadEvents();
 
-      console.log("✅ Time-off deleted and calendar fully refreshed");
+      if (isDev) console.log("✅ Time-off deleted and calendar fully refreshed");
       return;
     }
 
@@ -1233,7 +1249,7 @@ const handleDelete = async () => {
 
     if (delErr) throw delErr;
 
-    console.log("🗑️ Deleted appointment");
+    if (isDev) console.log("🗑️ Deleted appointment");
 
     // 🔄 Refresh UI
     await loadEvents();
@@ -1245,7 +1261,7 @@ const handleDelete = async () => {
     setPendingGroupId(null);
     setSeriesDeleteOpen(false);
 
-    console.log("✅ Appointment deleted and calendar state refreshed");
+    if (isDev) console.log("✅ Appointment deleted and calendar state refreshed");
 
     // ✉️ Send cancellation email only for patient appointments
     let patient: any = null;
@@ -1258,9 +1274,9 @@ const handleDelete = async () => {
 
     if (patient?.first_name && appt?.services) {
       await sendDualEmail("cancellation", providerId, appt);
-      console.log("✉️ Sent cancellation email to patient + provider");
+      if (isDev) console.log("✉️ Sent cancellation email to patient + provider");
     } else {
-      console.log("🧩 Skipped email — provider time off or non-patient event");
+      if (isDev) console.log("🧩 Skipped email — provider time off or non-patient event");
     }
   } catch (err: any) {
     console.error("❌ Delete failed:", err);
@@ -1285,7 +1301,7 @@ useEffect(() => {
       console.warn("🧩 updateSize patch caught:", e);
     }
   };
-  console.log("🧩 FullCalendar updateSize patched");
+  if (isDev) console.log("🧩 FullCalendar updateSize patched");
 }, []);
 
 
@@ -1352,6 +1368,12 @@ if (loading) return <div className="p-4 text-gray-500">Loading calendar…</div>
         `}
         </style>
 
+        {/* 🌀 Step 2: Spinner overlay */}
+        {saving && (
+          <div className="absolute inset-0 bg-white/70 flex items-center justify-center z-[9999]">
+            <div className="w-10 h-10 border-4 border-blue-400 border-t-transparent rounded-full animate-spin"></div>
+          </div>
+        )}
 
         <FullCalendar
           ref={calendarRef}
@@ -1552,9 +1574,16 @@ if (loading) return <div className="p-4 text-gray-500">Loading calendar…</div>
       {/* Appointment Modal */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
         <DialogContent
-          onOpenAutoFocus={(e) => e.preventDefault()}
-          className="sm:max-w-lg w-full max-h-[90vh] flex flex-col overflow-hidden rounded-xl shadow-lg bg-white"
+          onOpenAutoFocus={(e) => {
+            e.preventDefault();
+            setTimeout(() => {
+              const firstInput = document.querySelector("input, select, textarea");
+              if (firstInput instanceof HTMLElement) firstInput.focus();
+            }, 50);
+          }}
+          className="sm:max-w-lg ..."
         >
+
           {/* 🧩 Hidden header for accessibility only (no visible spacing) */}
           <VisuallyHidden>
             <DialogHeader>
