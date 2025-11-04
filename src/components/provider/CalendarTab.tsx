@@ -432,14 +432,21 @@ async function loadAvailabilityOverrides() {
             let end: Date;
 
             if (o.off_date && o.all_day) {
-              // 🟩 Build full-day range to fill entire column
+              // 🟩 Full-day or repeating full-day (including meta_repeat)
               const [year, month, day] = o.off_date.split("-").map(Number);
               start = new Date(year, month - 1, day, 0, 0, 0, 0);
               end = new Date(year, month - 1, day, 23, 59, 59, 999);
-            } else {
-              // 🟦 Partial-day time off
+            } else if (o.start_time && o.end_time) {
+              // 🟦 Partial-day
               start = new Date(o.start_time);
               end = new Date(o.end_time);
+            } else if (o.meta_repeat && o.meta_repeat.start_date) {
+              // 🧩 Handle repeating full-day with meta_repeat but no off_date
+              const base = new Date(o.meta_repeat.start_date);
+              start = new Date(base);
+              end = new Date(base.getFullYear(), base.getMonth(), base.getDate(), 23, 59, 59, 999);
+            } else {
+              return null; // skip invalid
             }
 
             return {
@@ -585,17 +592,29 @@ async function loadAvailabilityOverrides() {
   }, [providerId, ctxHours]);
 
 
-
-
   const resetForm = () => {
     setModalOpen(false);
     setEditingEvent(null);
     setSelectedDate(null);
+    setEndDate(null);
     setSelectedPatient(null);
     setSelectedService(null);
     setDuration(30);
     setIsTimeOff(false);
+    setIsAvailability(false);
+
+    // 🧩 Reset repeating + time-off fields
+    setIsRepeating(false);
+    setRepeatFrequency(1);
+    setRepeatUnit("weeks");
+    setRepeatUntil("");
+    setTimeOffReason("");
+    setTimeOffMode("hours");
+
+    // 🧹 Clean flags
+    setIsDirty(false);
   };
+
 
   const handleDateClick = (info: any) => {
     setEditingEvent(null);
@@ -890,24 +909,60 @@ async function loadAvailabilityOverrides() {
               return d;
             })();
 
+        const baseDuration = (end.getTime() - start.getTime()) / 60000;
+        const isFullDay =
+          start.getHours() === 0 &&
+          start.getMinutes() === 0 &&
+          end.getHours() === 23 &&
+          end.getMinutes() === 59;
+
         let current = new Date(start);
         while (current <= until) {
-          const endCurrent = new Date(current.getTime() + duration * 60000);
-          repeats.push({
-            provider_id: providerId,
-            start_time: toUTC(current),
-            end_time: toUTC(endCurrent),
-            reason: timeOffReason || "Repeating time off",
-            meta_repeat: {
-              group_id: groupId,
-              frequency: repeatFrequency,
-              unit: repeatUnit,
+          const [y, m, d] = [
+            current.getFullYear(),
+            current.getMonth(),
+            current.getDate(),
+          ];
+
+          if (isFullDay) {
+            // 🟩 full-day repeating off
+            repeats.push({
+              provider_id: providerId,
+              off_date: `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(
+                2,
+                "0"
+              )}`,
+              all_day: true,
+              reason: timeOffReason || "Repeating full-day time off",
+              meta_repeat: {
+                group_id: groupId,
+                frequency: repeatFrequency,
+                unit: repeatUnit,
+                reason: timeOffReason || "Repeating time off",
+                start_date: toUTC(start),
+              },
+            });
+          } else {
+            // 🕓 partial repeating off
+            const endCurrent = new Date(current.getTime() + baseDuration * 60000);
+            repeats.push({
+              provider_id: providerId,
+              start_time: toUTC(current),
+              end_time: toUTC(endCurrent),
               reason: timeOffReason || "Repeating time off",
-              start_date: toUTC(start),
-            },
-          });
+              meta_repeat: {
+                group_id: groupId,
+                frequency: repeatFrequency,
+                unit: repeatUnit,
+                reason: timeOffReason || "Repeating time off",
+                start_date: toUTC(start),
+              },
+            });
+          }
+
           current.setDate(
-            current.getDate() + (repeatUnit === "weeks" ? repeatFrequency * 7 : repeatFrequency)
+            current.getDate() +
+              (repeatUnit === "weeks" ? repeatFrequency * 7 : repeatFrequency)
           );
         }
 
@@ -916,10 +971,11 @@ async function loadAvailabilityOverrides() {
 
         await safeReload();
         resetForm();
-        toast.success(`Added ${repeats.length} repeating time-off blocks ✅`);
+        toast.success(`✅ Added ${repeats.length} repeating time-off blocks`);
         setSaving(false);
         return;
       }
+
 
       // 🟩 3️⃣ CREATE one-off availability override
       if (isAvailability) {
