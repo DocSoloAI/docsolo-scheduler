@@ -15,6 +15,18 @@ import { upsertPatientAndCreateAppointment } from "@/lib/db";
 import { toast } from "react-hot-toast";
 import { fromUTCToTZ, fromTZToUTC, formatInTZ } from "@/utils/timezone";
 
+// ✅ Store local time values directly without timezone conversion
+function storeLocalTimeAsUTC(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  const seconds = String(date.getSeconds()).padStart(2, '0');
+  
+  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}+00`;
+}
+
 export default function BookingPage() {
   const { services } = useSettings();
   const [providerId, setProviderId] = useState<string | null>(null);
@@ -548,13 +560,12 @@ export default function BookingPage() {
       let manageToken: string | null = null;
 
       if (rescheduleId) {
-        // 🔄 Update existing appointment
         const { error: updateError } = await supabase
           .from("appointments")
           .update({
             service_id: serviceId,
-            start_time: start.toISOString(),
-            end_time: end.toISOString(),
+            start_time: storeLocalTimeAsUTC(start),
+            end_time: storeLocalTimeAsUTC(end),
             status: "booked",
           })
           .eq("id", rescheduleId);
@@ -582,8 +593,8 @@ export default function BookingPage() {
           },
           {
             service_id: serviceId,
-            start_time: start.toISOString(),
-            end_time: end.toISOString(),
+            start_time: storeLocalTimeAsUTC(start),
+            end_time: storeLocalTimeAsUTC(end),
             status: "booked",
             patient_note: comments || null,
           }
