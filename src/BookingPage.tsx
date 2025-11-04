@@ -858,50 +858,57 @@ export default function BookingPage() {
                             )}
                             :
                           </p>
-                          <div className="grid grid-cols-2 gap-4">
-                            {/* AM column */}
-                            <div className="flex flex-col gap-3">
-                              {availableTimes
-                                .filter((time) => time.toLowerCase().includes("am"))
-                                .map((time) => (
-                                  <Button
-                                    key={time}
-                                    onClick={() => setSelectedTime(time)}
-                                    className={`w-full
-                                      ${selectedTime === time
-                                        ? "bg-blue-600 text-white hover:bg-blue-700"
-                                        : "bg-white border border-gray-300 text-gray-700 hover:bg-gray-100"
-                                      }`}
-                                  >
-                                    {time}
-                                  </Button>
 
-
-                                ))}
+                          {/* 🟢 Show message if array contains only a note */}
+                          {availableTimes.length === 1 &&
+                          availableTimes[0].toLowerCase().includes("no appointments") ? (
+                            <div className="text-center text-gray-600 bg-gray-50 border rounded-md p-4">
+                              {availableTimes[0]}
                             </div>
-
-                            {/* PM column */}
-                            <div className="flex flex-col gap-3">
-                              {availableTimes
-                                .filter((time) => time.toLowerCase().includes("pm"))
-                                .map((time) => (
-                                  <Button
-                                    key={time}
-                                    onClick={() => setSelectedTime(time)}
-                                    className={`w-full
-                                      ${selectedTime === time
-                                        ? "bg-blue-600 text-white hover:bg-blue-700"
-                                        : "bg-white border border-gray-300 text-gray-700 hover:bg-gray-100"
+                          ) : (
+                            <div className="grid grid-cols-2 gap-4">
+                              {/* AM column */}
+                              <div className="flex flex-col gap-3">
+                                {availableTimes
+                                  .filter((time) => time.toLowerCase().includes("am"))
+                                  .map((time) => (
+                                    <Button
+                                      key={time}
+                                      onClick={() => setSelectedTime(time)}
+                                      className={`w-full ${
+                                        selectedTime === time
+                                          ? "bg-blue-600 text-white hover:bg-blue-700"
+                                          : "bg-white border border-gray-300 text-gray-700 hover:bg-gray-100"
                                       }`}
-                                  >
-                                    {time}
-                                  </Button>
+                                    >
+                                      {time}
+                                    </Button>
+                                  ))}
+                              </div>
 
-                                ))}
+                              {/* PM column */}
+                              <div className="flex flex-col gap-3">
+                                {availableTimes
+                                  .filter((time) => time.toLowerCase().includes("pm"))
+                                  .map((time) => (
+                                    <Button
+                                      key={time}
+                                      onClick={() => setSelectedTime(time)}
+                                      className={`w-full ${
+                                        selectedTime === time
+                                          ? "bg-blue-600 text-white hover:bg-blue-700"
+                                          : "bg-white border border-gray-300 text-gray-700 hover:bg-gray-100"
+                                      }`}
+                                    >
+                                      {time}
+                                    </Button>
+                                  ))}
+                              </div>
                             </div>
-                          </div>
+                          )}
                         </div>
                       )}
+
                     </div>
                   </CardContent>
                 </Card>
