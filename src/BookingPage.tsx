@@ -288,6 +288,11 @@ export default function BookingPage() {
 
       if (!isActive) return;
 
+console.log("🟩 Time-off rows fetched:", offs);
+offs?.forEach((o) =>
+  console.log("off_date type/value:", typeof o.off_date, o.off_date)
+);
+
     // ✅ Detect full-day off (supports off_date or legacy start/end)
     const hasFullDayOff = (offs || []).some((o) => {
       if (!o || !o.all_day) return false;
