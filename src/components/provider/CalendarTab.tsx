@@ -140,8 +140,8 @@ async function sendDualEmail(
 interface AppointmentEvent {
   id: string;
   title?: string; // ✅ optional for background/availability events
-  start: string;
-  end: string;
+  start: string | Date; // ✅ allow Date objects (required for FullCalendar)
+  end: string | Date;
   display?: string;
   backgroundColor?: string;
   borderColor?: string;
@@ -307,35 +307,63 @@ const tryGoto = () => {
 
 // 🩵 Load provider one-off availability overrides (read-only background)
 async function loadAvailabilityOverrides() {
+  // 🔍 Track when this runs
+  console.log("🩵 loadAvailabilityOverrides() triggered for provider:", providerId);
+
+  if (!providerId) {
+    console.warn("⚠️ Skipping overrides load — providerId missing");
+    return [];
+  }
+
   const { data, error } = await supabase
     .from("availability_overrides")
-    .select("id, start_time, end_time, is_active")
-    .eq("provider_id", providerId);
+    .select("id, start_time, end_time, is_active, note")
+    .eq("provider_id", providerId)
+    .eq("is_active", true); // ✅ explicitly match true
 
   if (error) {
     console.error("❌ Error loading availability overrides:", error.message);
     return [];
   }
 
-  // map rows → FullCalendar availability override events
-  const mapped = (data || [])
-    .filter((r) => r.is_active)
-    .map((r) => ({
+  console.log("🧩 Raw overrides from DB:", data);
+
+  if (!data || data.length === 0) {
+    console.log("🩶 No active overrides found for this provider.");
+    return [];
+  }
+
+  const mapped = data.map((r) => {
+    const start = new Date(r.start_time);
+    const end = new Date(r.end_time);
+
+    return {
       id: `avail-${r.id}`,
-      start: r.start_time,
-      end: r.end_time,
-      display: "auto", // ✅ allow normal event behavior
-      interactive: true, // ✅ allow clicking for delete
-      backgroundColor: "#E0F7FA", // same light teal
-      borderColor: "#B2EBF2",
-      textColor: "#004D40",
-      extendedProps: { status: "availability_override" },
-    }));
+      title: "", // no text
+      start,
+      end,
+      allDay: false,
+      display: "auto", // ✅ keep clickability
+      overlap: true,
+      editable: false,
+      backgroundColor: "#E0F7FA", // soft teal
+      borderColor: "transparent",
+      textColor: "transparent",
+      classNames: ["availability-block"], // ✅ add this line
+      extendedProps: {
+        status: "availability_override",
+        source: "availability_override",
+      },
+    };
+  });
 
-  console.log("🩵 Overrides loaded:", mapped.length);
+
+  console.log("🩵 Overrides mapped to calendar events:", mapped);
+
   return mapped;
-
 }
+
+
 
   // ✅ Resilient calendar loader that merges appointments + time off reliably
   const loadEvents = async () => {
@@ -434,67 +462,90 @@ async function loadAvailabilityOverrides() {
 
 
 
-      // ---------- Merge & Render ----------
-      const overrides = await loadAvailabilityOverrides();
+        // ---------- Merge & Render ----------
+        console.log("🩵 Loading overrides before merge...");
+        const overrides = await loadAvailabilityOverrides();
+        console.log("🩵 Overrides returned to loadEvents:", overrides.length);
 
-      // 🩵 Build background events from provider's base availability
-console.log("🔍 Raw ctxHours sample:", ctxHours.slice(0, 3));
+        console.log("🔍 Raw ctxHours sample:", ctxHours?.slice(0, 3));
 
-      const baseAvailability = (ctxHours || [])
-        .filter((a: any) => a.is_active !== false)
-        .map((a: any) => ({
-          id: `base-${a.day_of_week}-${a.start_time}`,
-          daysOfWeek: [a.day_of_week],
-          startTime: a.start_time.slice(0, 5), // keep exact stored HH:mm
-          endTime: a.end_time.slice(0, 5),
-          display: "background",
-          backgroundColor: "#E0F7FA",
-          borderColor: "transparent",
-          textColor: "transparent",
-          extendedProps: { status: "base_availability" },
-        }));
+        const baseAvailability = (ctxHours || [])
+          .filter((a: any) => a.is_active !== false)
+          .map((a: any) => ({
+            id: `base-${a.day_of_week}-${a.start_time}`,
+            daysOfWeek: [a.day_of_week],
+            startTime: a.start_time.slice(0, 5),
+            endTime: a.end_time.slice(0, 5),
+            display: "background",
+            backgroundColor: "#E0F7FA",
+            borderColor: "transparent",
+            textColor: "transparent",
+            extendedProps: { status: "base_availability" },
+          }));
 
-
-    //console.log("🩵 Base availability preview:", baseAvailability);
-
-    // ✅ Merge everything together into one master array
-    const allEvents = [
-      ...mappedAppts,      // normal appointments
-      ...mappedOffs,       // time-off blocks (from modal)
-      ...overrides,        // one-off availability overrides (from modal)
-      ...baseAvailability, // recurring base availability (from Hours tab)
-    ];
-
-    // ✅ Force FullCalendar to reload fresh events
-    if (calendarRef.current) {
-      const api = calendarRef.current.getApi();
-      api.removeAllEvents();
-      allEvents.forEach((e) => api.addEvent(e));
-    }
-
-    console.log("🧩 First few events:", allEvents.slice(0, 3));
-    console.log(`✅ Calendar reloaded: ${allEvents.length} total events`);
+          const allEvents = [
+            ...(baseAvailability || []),
+            ...(mappedOffs || []),
+            ...(mappedAppts || []),
+            ...(overrides || []), // ✅ render on top
+          ];
 
 
 
-    // ✅ Debug logs
-    console.log("🧩 First few events:", allEvents.slice(0, 3));
-    console.log(`✅ Calendar reloaded: ${allEvents.length} total events`);
-    } catch (err: any) {
-      console.error("❌ loadEvents failed:", err.message);
-    }
-  };
+        // 🧩 Merged total events before render
+        console.log("🧩 Merged total events before render:", allEvents.length);
+
+        // ✅ Force FullCalendar to reload fresh events
+        if (calendarRef.current) {
+          const api = calendarRef.current.getApi();
+          api.removeAllEvents();
+
+          // 🧠 Diagnostic: show what's about to be added
+          console.log(
+            "🧠 Adding events to calendar:",
+            allEvents.map((e: any) => ({
+              id: e.id,
+              title: e.title ?? "(no title)",
+              start: e.start ?? e.startTime ?? "(no start)",
+              end: e.end ?? e.endTime ?? "(no end)",
+              status: e.extendedProps?.status ?? "(none)",
+            }))
+          );
+
+          allEvents.forEach((e) => api.addEvent(e));
+        }
+
+
+        // 🧠 Skip setEvents — avoids duplicate time-off rendering
+
+
+        console.log("✅ Calendar reloaded:", allEvents.length, "total events");
+        const hasAvail = allEvents.some((e: any) => e.extendedProps?.status === "availability_override");
+        console.log("🔎 Availability event detected:", hasAvail);
+
+            console.log("🧩 First few events:", allEvents.slice(0, 3));
+            console.log(`✅ Calendar reloaded: ${allEvents.length} total events`);
+
+
+
+            // ✅ Debug logs
+            console.log("🧩 First few events:", allEvents.slice(0, 3));
+            console.log(`✅ Calendar reloaded: ${allEvents.length} total events`);
+            } catch (err: any) {
+              console.error("❌ loadEvents failed:", err.message);
+            }
+          };
 
 
   useEffect(() => {
-    // ⏳ Wait until provider hours (ctxHours) are loaded
-    if (!ctxHours || ctxHours.length === 0) {
-      console.log("🕓 Skipping loadEvents — ctxHours not ready yet");
+    if (!providerId || !ctxHours || ctxHours.length === 0) {
+      console.log("🕓 Skipping loadEvents — missing providerId or ctxHours not ready");
       return;
     }
 
     console.log("🚀 Running loadEvents with ctxHours count:", ctxHours.length);
     loadEvents();
+
 
     // 🪄 Subscribe to realtime updates for both appointments and time_off
     const channel = supabase
@@ -872,21 +923,33 @@ console.log("🔍 Raw ctxHours sample:", ctxHours.slice(0, 3));
 
       // 🟩 3️⃣ CREATE one-off availability override
       if (isAvailability) {
-        const { error: availErr } = await supabase.from("availability_overrides").insert([
-          {
-            provider_id: providerId,
-            start_time: toUTC(start),
-            end_time: toUTC(end),
-            note: "One-off availability",
-          },
-        ]);
-        if (availErr) throw availErr;
+        const { error: availErr } = await supabase
+          .from("availability_overrides")
+          .insert([
+            {
+              provider_id: providerId,
+              start_time: selectedDate.toISOString(), // ✅ directly save ISO string
+              end_time: endDate?.toISOString(),
+              is_active: true,
+              note: "One-off availability",
+            },
+          ]);
+
+        if (availErr) {
+          console.error("❌ Error adding availability:", availErr.message);
+          toast.error("Error adding availability");
+          setSaving(false);
+          return;
+        }
+
+        // ✅ Immediately refresh UI
         await loadEvents();
         resetForm();
         toast.success("Added custom availability");
         setSaving(false);
         return;
       }
+
 
       // 🟥 4️⃣ CREATE new single time-off block
       if (isTimeOff) {
@@ -1210,8 +1273,29 @@ if (loading) return <div className="p-4 text-gray-500">Loading calendar…</div>
               gap: 0.4rem !important;
             }
           }
+
+          /* ✅ Force availability events above background */
+          .z-top-override {
+            z-index: 9999 !important;
+            position: relative !important;
+          }
+            /* ✅ Full-height teal availability block (not wafer thin) */
+          .availability-block {
+            height: 100% !important;
+            min-height: 100% !important;
+            border-radius: 0 !important;
+            opacity: 1 !important;
+          }
+
+          .availability-block .fc-event-main {
+            height: 100% !important;
+            min-height: 100% !important;
+            background-color: #E0F7FA !important;
+            border: none !important;
+          }
         `}
         </style>
+
 
         <FullCalendar
           ref={calendarRef}
