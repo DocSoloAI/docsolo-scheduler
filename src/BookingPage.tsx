@@ -266,35 +266,23 @@ export default function BookingPage() {
 
       if (!isActive) return;
 
-      // --- Fetch time_off (with off_date support) ---
-      const { data: rawOffs, error: offErr } = await supabase
+      // --- Fetch time_off (include off_date rows too) ---
+      const { data: offs, error: offErr } = await supabase
         .from("time_off")
-        .select("start_time, end_time, all_day, reason, off_date") // ✅ include off_date
+        .select("start_time, end_time, all_day, reason, off_date")
         .eq("provider_id", providerId)
-        .or(
-          `and(start_time.lte.${endOfDayUTC.toISOString()},end_time.gte.${startOfDayUTC.toISOString()})`
-        );
+        .or(`
+          off_date.eq.${selectedDate.toISOString().slice(0, 10)},
+          and(start_time.lte.${endOfDayUTC.toISOString()},end_time.gte.${startOfDayUTC.toISOString()})
+        `);
 
       if (offErr) {
         console.error("❌ time_off fetch error:", offErr);
       }
 
+      console.log("🟩 Time-off rows fetched:", offs);
 
-      // ✅ Keep only rows that match the selected date (by YYYY-MM-DD)
-      const selectedDayString = new Date(
-        Date.UTC(
-          selectedDate.getFullYear(),
-          selectedDate.getMonth(),
-          selectedDate.getDate()
-        )
-      )
-        .toISOString()
-        .slice(0, 10);
-
-      const offs = (rawOffs || []).filter((o) => {
-        const offDay = o.start_time.slice(0, 10);
-        return offDay === selectedDayString;
-      });
+      if (!isActive) return;
 
       console.log("🟩 Time-off rows fetched:", offs);
 
