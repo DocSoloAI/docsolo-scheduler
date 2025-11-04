@@ -40,15 +40,7 @@ import {
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { toast } from "react-hot-toast";
 
-import { formatInTimeZone, toZonedTime } from "date-fns-tz";
-
-// ✅ Convert a local date into UTC ISO string, respecting provider’s timezone
-function toUTC(date: Date, timeZone: string): string {
-  const zoned = toZonedTime(date, timeZone);
-  const offsetMinutes = zoned.getTimezoneOffset();
-  const utc = new Date(zoned.getTime() - offsetMinutes * 60000);
-  return utc.toISOString();
-}
+import { fromUTCToTZ, fromTZToUTC, formatInTZ } from "@/utils/timezone";
 
 const isDev = import.meta.env.DEV;
 
@@ -417,18 +409,14 @@ async function loadAvailabilityOverrides() {
           const serviceColor = appt.services?.color || "#3b82f6";
           const color = appt.status === "time_off" ? "#fca5a5" : serviceColor;
 
-          // ✅ Parse as UTC but interpret the TIME VALUES as local
-          // "2025-11-07 09:00:00+00" should become Nov 7, 2025 at 9:00 AM local
-          const parseAsLocal = (utcString: string) => {
-            const iso = utcString.replace(" ", "T").replace("+00", "");
-            const [datePart, timePart] = iso.split("T");
-            const [year, month, day] = datePart.split("-").map(Number);
-            const [hour, minute, second] = timePart.split(":").map(Number);
-            return new Date(year, month - 1, day, hour, minute, second || 0);
+          // ✅ Parse UTC timestamp from database → local Date in provider timezone
+          const parseAppointmentTime = (utcString: string) => {
+            return fromUTCToTZ(utcString, providerTimezone);
           };
 
-          const startFixed = parseAsLocal(appt.start_time);
-          const endFixed = parseAsLocal(appt.end_time);
+          // ✅ Use the new helper
+          const startFixed = parseAppointmentTime(appt.start_time);
+          const endFixed = parseAppointmentTime(appt.end_time);
 
           return {
             id: appt.id,
@@ -474,18 +462,18 @@ async function loadAvailabilityOverrides() {
               end = new Date(year, month - 1, day, 23, 59, 59, 999);
             } else if (o.start_time && o.end_time) {
               // 🟦 Partial-day
-              start = new Date(o.start_time);
-              end = new Date(o.end_time);
+              start = fromUTCToTZ(o.start_time, providerTimezone); // ✅ CHANGED
+              end = fromUTCToTZ(o.end_time, providerTimezone);     // ✅ CHANGED
             } else if (o.meta_repeat && o.meta_repeat.start_date) {
               // 🧩 Handle repeating full-day with meta_repeat but no off_date
-              const base = new Date(o.meta_repeat.start_date);
+              const base = fromUTCToTZ(o.meta_repeat.start_date, providerTimezone); // ✅ CHANGED
               start = new Date(base);
               end = new Date(base.getFullYear(), base.getMonth(), base.getDate(), 23, 59, 59, 999);
             } else {
               return null; // skip invalid
             }
 
-            return {
+                        return {
               id: o.id,
               title: isHoliday ? "Office Closed" : o.reason || "OFF",
               start,
@@ -583,13 +571,24 @@ async function loadAvailabilityOverrides() {
 
   useEffect(() => {
     if (!providerId || !ctxHours || ctxHours.length === 0) {
-      if (isDev) console.log("🕓 Skipping loadEvents — missing providerId or ctxHours not ready");
+      if (isDev)
+        console.log("🕓 Skipping loadEvents — missing providerId or ctxHours not ready");
       return;
     }
 
-    if (isDev) console.log("🚀 Running loadEvents with ctxHours count:", ctxHours.length);
+    if (isDev)
+      console.log("🚀 Running loadEvents with ctxHours count:", ctxHours.length);
     loadEvents();
 
+    // 🧠 Debounce helper — prevents overlapping reloads from firing too fast
+    let reloadTimer: NodeJS.Timeout | null = null;
+    const triggerReload = () => {
+      if (reloadTimer) clearTimeout(reloadTimer);
+      reloadTimer = setTimeout(() => {
+        if (isDev) console.log("⚡ Debounced realtime reload triggered");
+        loadEvents();
+      }, 400); // adjust delay if needed
+    };
 
     // 🪄 Subscribe to realtime updates for both appointments and time_off
     const channel = supabase
@@ -602,9 +601,10 @@ async function loadAvailabilityOverrides() {
           table: "appointments",
           filter: `provider_id=eq.${providerId}`,
         },
-        async () => {
-          if (isDev) console.log("🔄 Realtime: appointments changed → refreshing calendar");
-          await loadEvents();
+        () => {
+          if (isDev)
+            console.log("🔄 Realtime: appointments changed → refreshing calendar");
+          triggerReload();
         }
       )
       .on(
@@ -615,9 +615,10 @@ async function loadAvailabilityOverrides() {
           table: "time_off",
           filter: `provider_id=eq.${providerId}`,
         },
-        async () => {
-          if (isDev) console.log("🔄 Realtime: time_off changed → refreshing calendar");
-          await loadEvents();
+        () => {
+          if (isDev)
+            console.log("🔄 Realtime: time_off changed → refreshing calendar");
+          triggerReload();
         }
       )
       .subscribe();
@@ -625,8 +626,10 @@ async function loadAvailabilityOverrides() {
     // 🧹 Cleanup on unmount
     return () => {
       supabase.removeChannel(channel);
+      if (reloadTimer) clearTimeout(reloadTimer);
     };
   }, [providerId, ctxHours]);
+
 
 
   const resetForm = () => {
@@ -813,8 +816,8 @@ async function loadAvailabilityOverrides() {
             const { error: offErr } = await supabase
               .from("time_off")
               .update({
-                start_time: toUTC(start, providerTimezone),
-                end_time: toUTC(end, providerTimezone),
+                start_time: fromTZToUTC(start, providerTimezone).toISOString(), // ✅ NEW
+                end_time: fromTZToUTC(end, providerTimezone).toISOString(),     // ✅ NEW
               })
               .eq("id", info.event.id);
 
@@ -829,8 +832,8 @@ async function loadAvailabilityOverrides() {
           const { data: updated, error } = await supabase
             .from("appointments")
             .update({
-              start_time: toUTC(start, providerTimezone),
-              end_time: toUTC(end, providerTimezone),
+              start_time: fromTZToUTC(start, providerTimezone).toISOString(), // ✅ NEW
+              end_time: fromTZToUTC(end, providerTimezone).toISOString(),     // ✅ NEW
 
             })
             .eq("id", info.event.id)
@@ -884,8 +887,8 @@ async function loadAvailabilityOverrides() {
             updateData.start_time = null;
             updateData.end_time = null;
           } else {
-            updateData.start_time = toUTC(start, providerTimezone);
-            updateData.end_time = toUTC(end, providerTimezone);
+            updateData.start_time = fromTZToUTC(start, providerTimezone).toISOString(); // ✅ NEW
+            updateData.end_time = fromTZToUTC(end, providerTimezone).toISOString();     // ✅ NEW
             updateData.off_date = null;
           }
 
@@ -907,8 +910,8 @@ async function loadAvailabilityOverrides() {
         const { data: updated, error } = await supabase
           .from("appointments")
           .update({
-            start_time: toUTC(start, providerTimezone),
-            end_time: toUTC(end, providerTimezone),
+            start_time: fromTZToUTC(start, providerTimezone).toISOString(), // ✅ NEW
+            end_time: fromTZToUTC(end, providerTimezone).toISOString(),     // ✅ NEW
             status: "booked",
             patient_id: selectedPatient,
             service_id: selectedService,
@@ -968,7 +971,7 @@ async function loadAvailabilityOverrides() {
                 frequency: repeatFrequency,
                 unit: repeatUnit,
                 reason: timeOffReason || "Repeating time off",
-                start_date: toUTC(start, providerTimezone),
+                start_date: fromTZToUTC(start, providerTimezone).toISOString(),
               },
 
             });
@@ -977,15 +980,15 @@ async function loadAvailabilityOverrides() {
             const endCurrent = new Date(current.getTime() + baseDuration * 60000);
             repeats.push({
               provider_id: providerId,
-              start_time: toUTC(current, providerTimezone),
-              end_time: toUTC(endCurrent, providerTimezone),
+              start_time: fromTZToUTC(current, providerTimezone).toISOString(),  // ✅ NEW
+              end_time: fromTZToUTC(endCurrent, providerTimezone).toISOString(), // ✅ NEW
               reason: timeOffReason || "Repeating time off",
               meta_repeat: {
                 group_id: groupId,
                 frequency: repeatFrequency,
                 unit: repeatUnit,
                 reason: timeOffReason || "Repeating time off",
-                start_date: toUTC(start, providerTimezone),
+                start_date: fromTZToUTC(start, providerTimezone).toISOString(), // ✅ NEW
               },
             });
           }
@@ -1054,8 +1057,8 @@ async function loadAvailabilityOverrides() {
         if (isFullDay) {
           insertData.off_date = selectedDate.toISOString().slice(0, 10);
         } else {
-          insertData.start_time = toUTC(start, providerTimezone);
-          insertData.end_time = toUTC(end, providerTimezone);
+          insertData.start_time = fromTZToUTC(start, providerTimezone).toISOString();
+          insertData.end_time = fromTZToUTC(end, providerTimezone).toISOString();
         }
 
         const { data: newOff, error: offErr } = await supabase
@@ -1096,10 +1099,8 @@ async function loadAvailabilityOverrides() {
         .insert([
           {
             provider_id: providerId,
-            // 🕓 FullCalendar already gives a local Date; do NOT convert again
-            start_time: toUTC(start, providerTimezone), // ✅ Convert properly
-            end_time: toUTC(end, providerTimezone),     // ✅ Convert properly
-            status: "booked",
+            start_time: fromTZToUTC(start, providerTimezone).toISOString(), // ✅ NEW
+            end_time: fromTZToUTC(end, providerTimezone).toISOString(),     // ✅ NEW            status: "booked",
             patient_id: selectedPatient,
             service_id: selectedService,
           },
@@ -1694,7 +1695,7 @@ if (loading) return <div className="p-4 text-gray-500">Loading calendar…</div>
                         type="time"
                         value={
                           selectedDate
-                          ? formatInTimeZone(selectedDate, providerTimezone, "HH:mm")
+                          ? formatInTZ(selectedDate, providerTimezone, "HH:mm")
 
                             : ""
                         }
@@ -1713,7 +1714,7 @@ if (loading) return <div className="p-4 text-gray-500">Loading calendar…</div>
                         type="time"
                         value={
                           endDate
-                            ? formatInTimeZone(endDate, providerTimezone, "HH:mm")
+                          ? formatInTZ(endDate, providerTimezone, "HH:mm")
                             : ""
                         }
                         onChange={(e) => {
@@ -1723,7 +1724,7 @@ if (loading) return <div className="p-4 text-gray-500">Loading calendar…</div>
                           // 🕓 interpret selected time in provider's local timezone, then convert to UTC
                           const zoned = new Date(updated);
                           zoned.setHours(hours, minutes, 0, 0);
-                          const utc = toUTC(zoned, providerTimezone);
+                          const utc = fromTZToUTC(zoned, providerTimezone).toISOString();
 
                           setEndDate(new Date(utc)); // ✅ convert ISO string → Date object
                           setIsDirty(true);
@@ -1771,7 +1772,7 @@ if (loading) return <div className="p-4 text-gray-500">Loading calendar…</div>
                             type="time"
                             value={
                               selectedDate
-                                ? formatInTimeZone(selectedDate, providerTimezone, "HH:mm")
+                                ? formatInTZ(selectedDate, providerTimezone, "HH:mm")
                                 : ""
                             }
                             onChange={(e) => {
@@ -1781,7 +1782,7 @@ if (loading) return <div className="p-4 text-gray-500">Loading calendar…</div>
                               // 🕓 interpret selected time in provider's local timezone, then convert to UTC
                               const zoned = new Date(updated);
                               zoned.setHours(hours, minutes, 0, 0);
-                              const utc = toUTC(zoned, providerTimezone);
+                              const utc = fromTZToUTC(zoned, providerTimezone).toISOString();
 
                               setSelectedDate(new Date(utc)); // ✅ convert ISO string → Date object
                               markDirty();
@@ -1795,7 +1796,7 @@ if (loading) return <div className="p-4 text-gray-500">Loading calendar…</div>
                             type="time"
                             value={
                               endDate
-                                ? formatInTimeZone(endDate, providerTimezone, "HH:mm")
+                                ? formatInTZ(endDate, providerTimezone, "HH:mm")
                                 : ""
                             }
                             onChange={(e) => {
@@ -1805,7 +1806,7 @@ if (loading) return <div className="p-4 text-gray-500">Loading calendar…</div>
                               // 🕓 interpret selected time in provider's local timezone, then convert to UTC
                               const zoned = new Date(updated);
                               zoned.setHours(hours, minutes, 0, 0);
-                              const utc = toUTC(zoned, providerTimezone);
+                              const utc = fromTZToUTC(zoned, providerTimezone).toISOString();
 
                               setEndDate(new Date(utc)); // ✅ converts ISO string → Date object
                               setIsDirty(true);
