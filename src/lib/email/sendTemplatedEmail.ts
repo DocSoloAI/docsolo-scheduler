@@ -2,8 +2,8 @@
 
 interface AppointmentData {
   patientName: string;
-  patientEmail?: string;   // 👈 already here
-  patientPhone?: string;   // 👈 already here
+  patientEmail?: string;
+  patientPhone?: string;
   date: string;
   time: string;
   service: string;
@@ -13,10 +13,10 @@ interface AppointmentData {
   providerName?: string;
   location?: string;
   providerPhone?: string;
-  announcement?: string;
+  announcement?: string | null;
   logoUrl?: string;
   patientNote?: string;
-  subdomain?: string;      // 👈 NEW — needed for cancellation email booking link
+  subdomain?: string;
 }
 
 
@@ -41,6 +41,12 @@ export async function sendTemplatedEmail({
   appointmentData,
 }: SendTemplatedEmailOptions) {
   try {
+    // 🩵 Normalize empty or null announcements to null so {{#if announcement}} hides the yellow bar
+    appointmentData.announcement =
+      appointmentData.announcement && appointmentData.announcement.trim() !== ""
+        ? appointmentData.announcement
+        : null;
+
     const res = await fetch(
       `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sendTemplatedEmail`,
       {
