@@ -15,18 +15,6 @@ import { upsertPatientAndCreateAppointment } from "@/lib/db";
 import { toast } from "react-hot-toast";
 import { fromUTCToTZ, fromTZToUTC, formatInTZ } from "@/utils/timezone";
 
-// ✅ Store local time values directly without timezone conversion
-function storeLocalTimeAsUTC(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  const hours = String(date.getHours()).padStart(2, '0');
-  const minutes = String(date.getMinutes()).padStart(2, '0');
-  const seconds = String(date.getSeconds()).padStart(2, '0');
-  
-  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}+00`;
-}
-
 export default function BookingPage() {
   const { services } = useSettings();
   const [providerId, setProviderId] = useState<string | null>(null);
@@ -556,6 +544,30 @@ export default function BookingPage() {
       const start = new Date(startLocal);
       const end = new Date(start.getTime() + durationMin * 60000);
 
+      // ✅ Convert to UTC for storage
+      const startUTC = fromTZToUTC(start, providerTimezone).toISOString();
+      const endUTC = fromTZToUTC(end, providerTimezone).toISOString();
+
+      // 🔒 Check for conflicts BEFORE inserting
+      const { data: conflicts, error: conflictErr } = await supabase
+        .from("appointments")
+        .select("id")
+        .eq("provider_id", providerId)
+        .eq("status", "booked")
+        .gte("end_time", startUTC)
+        .lte("start_time", endUTC);
+
+      if (conflictErr) throw conflictErr;
+
+      if (conflicts && conflicts.length > 0) {
+        toast.error(
+          "That time slot is no longer available. Refreshing available times..."
+        );
+        setSelectedTime(null);
+        setShowConfirmModal(false);
+        return;
+      }
+      
       let appointmentId: string | null = null;
       let manageToken: string | null = null;
 
@@ -564,8 +576,8 @@ export default function BookingPage() {
           .from("appointments")
           .update({
             service_id: serviceId,
-            start_time: storeLocalTimeAsUTC(start),
-            end_time: storeLocalTimeAsUTC(end),
+            start_time: fromTZToUTC(start, providerTimezone).toISOString(),
+            end_time: fromTZToUTC(end, providerTimezone).toISOString(),
             status: "booked",
           })
           .eq("id", rescheduleId);
@@ -593,8 +605,8 @@ export default function BookingPage() {
           },
           {
             service_id: serviceId,
-            start_time: storeLocalTimeAsUTC(start),
-            end_time: storeLocalTimeAsUTC(end),
+            start_time: fromTZToUTC(start, providerTimezone).toISOString(),
+            end_time: fromTZToUTC(end, providerTimezone).toISOString(),
             status: "booked",
             patient_note: comments || null,
           }
