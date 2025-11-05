@@ -461,10 +461,11 @@ async function loadAvailabilityOverrides() {
               start = new Date(year, month - 1, day, 0, 0, 0, 0);
               end = new Date(year, month - 1, day, 23, 59, 59, 999);
             } else if (o.start_time && o.end_time) {
-              // 🟦 Partial-day
-              start = fromUTCToTZ(o.start_time, providerTimezone); // ✅ CHANGED
-              end = fromUTCToTZ(o.end_time, providerTimezone);     // ✅ CHANGED
-            } else if (o.meta_repeat && o.meta_repeat.start_date) {
+              // 🟦 Partial-day - treat DB timestamp as UTC, convert to local
+              const startUTC = new Date(o.start_time + 'Z'); // Add Z to mark as UTC
+              const endUTC = new Date(o.end_time + 'Z');
+              start = fromUTCToTZ(startUTC.toISOString(), providerTimezone);
+              end = fromUTCToTZ(endUTC.toISOString(), providerTimezone);            } else if (o.meta_repeat && o.meta_repeat.start_date) {
               // 🧩 Handle repeating full-day with meta_repeat but no off_date
               const base = fromUTCToTZ(o.meta_repeat.start_date, providerTimezone); // ✅ CHANGED
               start = new Date(base);
@@ -1057,8 +1058,8 @@ async function loadAvailabilityOverrides() {
         if (isFullDay) {
           insertData.off_date = selectedDate.toISOString().slice(0, 10);
         } else {
-          insertData.start_time = fromTZToUTC(start, providerTimezone).toISOString();
-          insertData.end_time = fromTZToUTC(end, providerTimezone).toISOString();
+          insertData.start_time = fromTZToUTC(start, providerTimezone).toISOString().slice(0, 19).replace('T', ' ');
+          insertData.end_time = fromTZToUTC(end, providerTimezone).toISOString().slice(0, 19).replace('T', ' ');
         }
 
         const { data: newOff, error: offErr } = await supabase
@@ -1704,7 +1705,7 @@ if (loading) return <div className="p-4 text-gray-500">Loading calendar…</div>
                           const updated = selectedDate ? new Date(selectedDate) : new Date();
                           updated.setHours(hours, minutes, 0, 0);
                           setSelectedDate(updated);
-                          setIsDirty(true);
+                          markDirty();
                         }}
                       />
                     </div>
@@ -1720,13 +1721,8 @@ if (loading) return <div className="p-4 text-gray-500">Loading calendar…</div>
                         onChange={(e) => {
                           const [hours, minutes] = e.target.value.split(":").map(Number);
                           const updated = endDate ? new Date(endDate) : new Date();
-
-                          // 🕓 interpret selected time in provider's local timezone, then convert to UTC
-                          const zoned = new Date(updated);
-                          zoned.setHours(hours, minutes, 0, 0);
-                          const utc = fromTZToUTC(zoned, providerTimezone).toISOString();
-
-                          setEndDate(new Date(utc)); // ✅ convert ISO string → Date object
+                          updated.setHours(hours, minutes, 0, 0);
+                          setEndDate(updated);
                           setIsDirty(true);
                         }}
                       />
@@ -1778,13 +1774,12 @@ if (loading) return <div className="p-4 text-gray-500">Loading calendar…</div>
                             onChange={(e) => {
                               const [hours, minutes] = e.target.value.split(":").map(Number);
                               const updated = selectedDate ? new Date(selectedDate) : new Date();
-
-                              // 🕓 interpret selected time in provider's local timezone, then convert to UTC
-                              const zoned = new Date(updated);
-                              zoned.setHours(hours, minutes, 0, 0);
-                              const utc = fromTZToUTC(zoned, providerTimezone).toISOString();
-
-                              setSelectedDate(new Date(utc)); // ✅ convert ISO string → Date object
+                              
+                              // Create a date string in provider's timezone, then parse it
+                              const dateStr = `${updated.getFullYear()}-${String(updated.getMonth() + 1).padStart(2, '0')}-${String(updated.getDate()).padStart(2, '0')}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`;
+                              const localDate = new Date(dateStr);
+                              
+                              setSelectedDate(localDate);
                               markDirty();
                             }}
                           />
@@ -1801,15 +1796,14 @@ if (loading) return <div className="p-4 text-gray-500">Loading calendar…</div>
                             }
                             onChange={(e) => {
                               const [hours, minutes] = e.target.value.split(":").map(Number);
-                              const updated = endDate ? new Date(endDate) : new Date();
-
-                              // 🕓 interpret selected time in provider's local timezone, then convert to UTC
-                              const zoned = new Date(updated);
-                              zoned.setHours(hours, minutes, 0, 0);
-                              const utc = fromTZToUTC(zoned, providerTimezone).toISOString();
-
-                              setEndDate(new Date(utc)); // ✅ converts ISO string → Date object
-                              setIsDirty(true);
+                              const updated = selectedDate ? new Date(selectedDate) : new Date();
+                              
+                              // Create a date string in provider's timezone, then parse it
+                              const dateStr = `${updated.getFullYear()}-${String(updated.getMonth() + 1).padStart(2, '0')}-${String(updated.getDate()).padStart(2, '0')}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`;
+                              const localDate = new Date(dateStr);
+                              
+                              setSelectedDate(localDate);
+                              markDirty();
                             }}
                           />
                         </div>
