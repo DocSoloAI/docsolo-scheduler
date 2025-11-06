@@ -57,17 +57,28 @@ export async function sendTemplatedEmail({
     .single();
 
   // replace placeholders with appointment + provider data
-  const fill = (str: string | null) =>
-    str
-      ? str.replace(/{{(.*?)}}/g, (_, key) => {
-          const k = key.trim();
-          return (
-            appointmentData[k as keyof AppointmentData] ||
-            provider?.[k as keyof typeof provider] ||
-            ""
-          );
-        })
-      : "";
+  const fill = (str: string | null) => {
+    if (!str) return "";
+
+    // 🧠 Remove {{#if announcement}} blocks if announcement is falsy
+    if (!provider?.announcement || provider.announcement.trim() === "") {
+      str = str.replace(
+        /{{#if\s+announcement}}([\s\S]*?){{\/if}}/g,
+        ""
+      );
+    }
+
+    // Replace normal {{variables}}
+    return str.replace(/{{(.*?)}}/g, (_, key) => {
+      const k = key.trim();
+      return (
+        appointmentData[k as keyof AppointmentData] ||
+        provider?.[k as keyof typeof provider] ||
+        ""
+      );
+    });
+  };
+
 
   const subject = fill(template.subject);
   let html = fill(template.html_body);
