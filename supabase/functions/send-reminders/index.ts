@@ -64,6 +64,7 @@ serve(async () => {
     const is24hReminder = diffMinutes >= 1380 && diffMinutes <= 1470;
     if (!is24hReminder) continue;
 
+    console.log("🚀 Sending reminder to", patient.email);
 
     await sendTemplatedEmail({
       templateType: "reminder",
