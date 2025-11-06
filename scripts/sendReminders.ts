@@ -2,6 +2,8 @@
 import { supabase } from "../src/lib/supabaseClient";
 import { sendTemplatedEmail } from "../src/lib/email/sendTemplatedEmail";
 import { format } from "date-fns";
+import dotenv from "dotenv";
+dotenv.config({ path: ".env" });
 
 interface ReminderAppt {
   id: string;

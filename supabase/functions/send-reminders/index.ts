@@ -27,6 +27,14 @@ serve(async () => {
     .lte("start_time", windowEnd.toISOString())
     .eq("status", "booked");
 
+    console.log("Found appointments:", appts?.length || 0);
+    if (appts && appts.length) {
+      for (const a of appts) {
+        console.log("⏰ Appt start_time (UTC):", a.start_time);
+      }
+    }
+
+
   if (error) {
     console.error("❌ Error fetching appointments:", error.message);
     return new Response("Error", { status: 500 });
