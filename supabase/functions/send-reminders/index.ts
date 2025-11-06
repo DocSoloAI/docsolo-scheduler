@@ -45,28 +45,36 @@ serve(async () => {
     return new Response("No reminders", { status: 200 });
   }
 
-  // 🌀 Loop through each appointment
   for (const appt of appts) {
+    console.log("➡️ Checking appt:", appt.id);
+
     try {
-      console.log("➡️ Checking appt:", appt.id);
-      console.log("Start time (UTC):", appt.start_time);
       console.log("Now (UTC):", now.toISOString());
+      console.log("Raw start_time:", appt.start_time);
+
+      const startRaw = appt.start_time;
+      const startISO = startRaw
+        ? startRaw.replace(" ", "T").replace("+00", "Z")
+        : "(undefined)";
+      console.log("Normalized ISO:", startISO);
+
+      const start = new Date(startISO);
+      console.log("Parsed start date:", start.toISOString());
+
+      const diffMinutes = (start.getTime() - now.getTime()) / 60000;
+      console.log("⏱ diffMinutes for", appt.id, "=", diffMinutes);
+
+      const is24hReminder = diffMinutes >= 1380 && diffMinutes <= 1470;
+      if (!is24hReminder) {
+        console.log("⏩ Skipping appt (outside 24h window):", diffMinutes);
+        continue;
+      }
 
       const patient = appt.patients?.[0];
       const service = appt.services?.[0];
       const provider = appt.providers?.[0];
-      if (!patient?.email) continue;
-
-      // ✅ Normalize Supabase timestamp (ensure valid ISO format)
-      const startISO = appt.start_time.replace(" ", "T").replace("+00", "Z");
-      const start = new Date(startISO);
-      const diffMinutes = (start.getTime() - now.getTime()) / 60000;
-      console.log("⏱ diffMinutes for", appt.id, "=", diffMinutes);
-
-      // ✅ Only send reminder if within 23h–24.5h
-      const is24hReminder = diffMinutes >= 1380 && diffMinutes <= 1470;
-      if (!is24hReminder) {
-        console.log("⏩ Skipping appt (outside 24h window):", diffMinutes);
+      if (!patient?.email) {
+        console.log("⚠️ No patient email, skipping");
         continue;
       }
 
@@ -83,7 +91,6 @@ serve(async () => {
           service: service?.name || "Appointment",
           appointmentId: appt.id,
           manageLink: `https://${provider?.subdomain || "demo"}.bookthevisit.com/manage/${appt.id}`,
-          // ✅ Only include announcement if it has text
           announcement:
             provider?.announcement?.trim() ? provider.announcement : null,
         },
@@ -91,7 +98,7 @@ serve(async () => {
 
       console.log(`✅ 24-hour reminder sent to ${patient.email}`);
     } catch (err) {
-      console.error("❌ Error processing appt:", appt.id, err);
+      console.error("❌ Error inside loop for appt", appt.id, err);
     }
   }
 
