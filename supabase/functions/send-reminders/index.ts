@@ -12,6 +12,7 @@ serve(async () => {
   const windowStart = new Date(now.getTime() + 90 * 60 * 1000);
   const windowEnd = new Date(now.getTime() + 24.25 * 60 * 60 * 1000);
 
+  // 🧠 Fetch upcoming appointments in next ~24h
   const { data: appts, error } = await supabase
     .from("appointments")
     .select(`
@@ -27,13 +28,12 @@ serve(async () => {
     .lte("start_time", windowEnd.toISOString())
     .eq("status", "booked");
 
-    console.log("Found appointments:", appts?.length || 0);
-    if (appts && appts.length) {
-      for (const a of appts) {
-        console.log("⏰ Appt start_time (UTC):", a.start_time);
-      }
+  console.log("Found appointments:", appts?.length || 0);
+  if (appts && appts.length) {
+    for (const a of appts) {
+      console.log("⏰ Appt start_time (UTC):", a.start_time);
     }
-
+  }
 
   if (error) {
     console.error("❌ Error fetching appointments:", error.message);
@@ -45,49 +45,57 @@ serve(async () => {
     return new Response("No reminders", { status: 200 });
   }
 
+  // 🌀 Loop through each appointment
   for (const appt of appts) {
-    console.log("➡️ Checking appt:", appt.id);
-    console.log("Start time (UTC):", appt.start_time);
-    console.log("Now (UTC):", now.toISOString());
+    try {
+      console.log("➡️ Checking appt:", appt.id);
+      console.log("Start time (UTC):", appt.start_time);
+      console.log("Now (UTC):", now.toISOString());
 
-    const patient = appt.patients?.[0];
-    const service = appt.services?.[0];
-    const provider = appt.providers?.[0];
-    if (!patient?.email) continue;
+      const patient = appt.patients?.[0];
+      const service = appt.services?.[0];
+      const provider = appt.providers?.[0];
+      if (!patient?.email) continue;
 
-    // Normalize Supabase timestamp (ensure valid ISO format)
-    const startISO = appt.start_time.replace(" ", "T").replace("+00", "Z");
-    const start = new Date(startISO);
-    const diffMinutes = (start.getTime() - now.getTime()) / 60000;
-    console.log("⏱ diffMinutes for", appt.id, "=", diffMinutes);
+      // ✅ Normalize Supabase timestamp (ensure valid ISO format)
+      const startISO = appt.start_time.replace(" ", "T").replace("+00", "Z");
+      const start = new Date(startISO);
+      const diffMinutes = (start.getTime() - now.getTime()) / 60000;
+      console.log("⏱ diffMinutes for", appt.id, "=", diffMinutes);
 
-    const is24hReminder = diffMinutes >= 1380 && diffMinutes <= 1470;
-    if (!is24hReminder) continue;
+      // ✅ Only send reminder if within 23h–24.5h
+      const is24hReminder = diffMinutes >= 1380 && diffMinutes <= 1470;
+      if (!is24hReminder) {
+        console.log("⏩ Skipping appt (outside 24h window):", diffMinutes);
+        continue;
+      }
 
-    console.log("🚀 Sending reminder to", patient.email);
+      console.log("🚀 Sending reminder to", patient.email);
 
-    await sendTemplatedEmail({
-      templateType: "reminder",
-      to: patient.email,
-      providerId: appt.provider_id,
-      appointmentData: {
-        patientName: `${patient.first_name} ${patient.last_name}`,
-        date: format(start, "MMMM d, yyyy"),
-        time: format(start, "h:mm a"),
-        service: service?.name || "Appointment",
-        appointmentId: appt.id,
-        manageLink: `https://${provider?.subdomain || "demo"}.bookthevisit.com/manage/${appt.id}`,
-        // ✅ Only include announcement if it has text
-        announcement:
-          provider?.announcement?.trim() ? provider.announcement : null,
-      },
-    });
+      await sendTemplatedEmail({
+        templateType: "reminder",
+        to: patient.email,
+        providerId: appt.provider_id,
+        appointmentData: {
+          patientName: `${patient.first_name} ${patient.last_name}`,
+          date: format(start, "MMMM d, yyyy"),
+          time: format(start, "h:mm a"),
+          service: service?.name || "Appointment",
+          appointmentId: appt.id,
+          manageLink: `https://${provider?.subdomain || "demo"}.bookthevisit.com/manage/${appt.id}`,
+          // ✅ Only include announcement if it has text
+          announcement:
+            provider?.announcement?.trim() ? provider.announcement : null,
+        },
+      });
 
-    console.log(`✅ 24-hour reminder sent to ${patient.email}`);
+      console.log(`✅ 24-hour reminder sent to ${patient.email}`);
+    } catch (err) {
+      console.error("❌ Error processing appt:", appt.id, err);
+    }
   }
 
   console.log("🏁 Reminder job complete, exiting...");
   await new Promise((r) => setTimeout(r, 500)); // give logs time to flush
   return new Response("Done", { status: 200 });
-
 });
