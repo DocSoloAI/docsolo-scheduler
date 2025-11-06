@@ -146,14 +146,6 @@ function computeHolidayDates(key: string, startDate: Date, endDate: Date): Date[
   return dates;
 }
 
-// --- helper to format a Date as YYYY-MM-DDTHH:mm:ss without timezone ---
-function toLocalIsoString(date: Date, endOfDay: boolean = false): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  const time = endOfDay ? "23:59:59" : "00:00:00";
-  return `${year}-${month}-${day}T${time}`;
-}
 
 // ---------------- component ----------------
 export default function HoursTab({ providerId, onDirtyChange }: HoursTabProps) {
@@ -526,8 +518,7 @@ console.log("🕓 Prepared hours before save:", prepared.slice(0, 3));
           holidayRows.push({
             id: generateId(),
             provider_id: providerId,
-            start_time: toLocalIsoString(d, false),  // 👈 Local midnight start
-            end_time: toLocalIsoString(d, true),     // 👈 Local end of day
+            off_date: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`,  // ✅ Use off_date
             reason: `holiday:${key}`,
             all_day: true,
           });
