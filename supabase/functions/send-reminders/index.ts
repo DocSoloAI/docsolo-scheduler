@@ -53,6 +53,7 @@ serve(async () => {
 
     const start = new Date(appt.start_time);
     const diffMinutes = (start.getTime() - now.getTime()) / 60000;
+    console.log("⏱️ diffMinutes for", appt.id, "=", diffMinutes);
 
     // ✅ Only 24-hour reminders (no 2-hour reminders)
     const is24hReminder = diffMinutes >= 1380 && diffMinutes <= 1470;
