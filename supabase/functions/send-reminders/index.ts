@@ -54,8 +54,11 @@ serve(async () => {
 
       const startRaw = appt.start_time;
       const startISO = startRaw
-        ? startRaw.replace(" ", "T").replace("+00", "Z")
-        : "(undefined)";
+        ? startRaw
+            .replace(" ", "T")
+            .replace(/\+00:?00?$/, "Z") // handle +00 or +00:00
+        : "";
+
       console.log("Normalized ISO:", startISO);
 
       const start = new Date(startISO);
