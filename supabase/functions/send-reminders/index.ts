@@ -55,9 +55,11 @@ serve(async () => {
     const provider = appt.providers?.[0];
     if (!patient?.email) continue;
 
-    const start = new Date(appt.start_time);
+    // Normalize Supabase timestamp (ensure valid ISO format)
+    const startISO = appt.start_time.replace(" ", "T").replace("+00", "Z");
+    const start = new Date(startISO);
     const diffMinutes = (start.getTime() - now.getTime()) / 60000;
-    console.log("⏱️ diffMinutes for", appt.id, "=", diffMinutes);
+    console.log("⏱ diffMinutes for", appt.id, "=", diffMinutes);
 
     const is24hReminder = diffMinutes >= 1380 && diffMinutes <= 1470;
     if (!is24hReminder) continue;
