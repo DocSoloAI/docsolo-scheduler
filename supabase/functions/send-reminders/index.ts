@@ -67,7 +67,7 @@ serve(async () => {
       const diffMinutes = (start.getTime() - now.getTime()) / 60000;
       console.log("⏱ diffMinutes for", appt.id, "=", diffMinutes);
 
-      const is24hReminder = diffMinutes >= 1380 && diffMinutes <= 1470;
+      const is24hReminder = diffMinutes >= 900 && diffMinutes <= 1470;
       if (!is24hReminder) {
         console.log("⏩ Skipping appt (outside 24h window):", diffMinutes);
         continue;
