@@ -20,7 +20,7 @@ serve(async () => {
       start_time,
       end_time,
       provider_id,
-      patients ( first_name, last_name, email ),
+      patient:patients!appointments_patient_id_fkey ( first_name, last_name, email ),
       services ( name ),
       providers ( subdomain, announcement )
     `)
@@ -54,9 +54,7 @@ serve(async () => {
 
       const startRaw = appt.start_time;
       const startISO = startRaw
-        ? startRaw
-            .replace(" ", "T")
-            .replace(/\+00:?00?$/, "Z") // handle +00 or +00:00
+        ? startRaw.replace(" ", "T").replace(/\+00:?00?$/, "Z") // handle +00 or +00:00
         : "";
 
       console.log("Normalized ISO:", startISO);
@@ -73,9 +71,10 @@ serve(async () => {
         continue;
       }
 
-      const patient = appt.patients?.[0];
+      const patient = appt.patient;
       const service = appt.services?.[0];
       const provider = appt.providers?.[0];
+
       if (!patient?.email) {
         console.log("⚠️ No patient email, skipping");
         continue;
@@ -94,8 +93,9 @@ serve(async () => {
           service: service?.name || "Appointment",
           appointmentId: appt.id,
           manageLink: `https://${provider?.subdomain || "demo"}.bookthevisit.com/manage/${appt.id}`,
-          announcement:
-            provider?.announcement?.trim() ? provider.announcement : null,
+          announcement: provider?.announcement?.trim()
+            ? provider.announcement
+            : null,
         },
       });
 
