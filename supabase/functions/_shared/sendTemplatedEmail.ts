@@ -82,12 +82,13 @@ export async function sendTemplatedEmail({
        </div>` + html;
   }
 
-  // append announcement if available
-  if (provider?.announcement) {
+  // append announcement only if it has content
+  if (provider?.announcement && provider.announcement.trim() !== "") {
     html += `<br/><br/><p style="font-size:12px;color:#555">
-               <em>${provider.announcement}</em>
-             </p>`;
+              <em>${provider.announcement}</em>
+            </p>`;
   }
+
 
   try {
     console.log("📧 Sending email via Resend:", {
