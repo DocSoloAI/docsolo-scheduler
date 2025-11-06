@@ -46,6 +46,10 @@ serve(async () => {
   }
 
   for (const appt of appts) {
+    console.log("➡️ Checking appt:", appt.id);
+    console.log("Start time (UTC):", appt.start_time);
+    console.log("Now (UTC):", now.toISOString());
+
     const patient = appt.patients?.[0];
     const service = appt.services?.[0];
     const provider = appt.providers?.[0];
@@ -55,9 +59,9 @@ serve(async () => {
     const diffMinutes = (start.getTime() - now.getTime()) / 60000;
     console.log("⏱️ diffMinutes for", appt.id, "=", diffMinutes);
 
-    // ✅ Only 24-hour reminders (no 2-hour reminders)
     const is24hReminder = diffMinutes >= 1380 && diffMinutes <= 1470;
     if (!is24hReminder) continue;
+
 
     await sendTemplatedEmail({
       templateType: "reminder",
