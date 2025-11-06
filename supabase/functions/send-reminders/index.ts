@@ -83,5 +83,8 @@ serve(async () => {
     console.log(`✅ 24-hour reminder sent to ${patient.email}`);
   }
 
+  console.log("🏁 Reminder job complete, exiting...");
+  await new Promise((r) => setTimeout(r, 500)); // give logs time to flush
   return new Response("Done", { status: 200 });
+
 });
