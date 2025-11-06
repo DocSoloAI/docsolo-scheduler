@@ -52,13 +52,14 @@ Appointment ID: {{appointmentId}}`,
 
           <p>Location: <strong>{{location}}</strong></p>
 
-          <p>
+          <div style="margin: 16px 0;">
             <a href="{{manageLink}}"
-              style="display:inline-block; margin-top:1em; padding:10px 16px; background:#2563eb; color:#fff;
-              text-decoration:none; border-radius:6px; font-weight:600;">
+              style="display:block; width:max-content; background:#2563eb; color:#fff;
+              text-decoration:none; border-radius:6px; font-weight:600;
+              padding:12px 20px; text-align:center;">
               Change / Cancel Appointment
             </a>
-          </p>
+          </div>
 
           <p>If you have questions, call or text
             <a href="tel:{{providerPhone}}" style="color:#2563eb;">{{providerPhone}}</a>
@@ -111,13 +112,14 @@ Appointment ID: {{appointmentId}}`,
 
           <p>Location: <strong>{{location}}</strong></p>
 
-          <p>
+          <div style="margin: 16px 0;">
             <a href="{{manageLink}}"
-              style="display:inline-block; margin-top:1em; padding:10px 16px; background:#2563eb; color:#fff;
-              text-decoration:none; border-radius:6px; font-weight:600;">
+              style="display:block; width:max-content; background:#2563eb; color:#fff;
+              text-decoration:none; border-radius:6px; font-weight:600;
+              padding:12px 20px; text-align:center;">
               Change / Cancel Appointment
             </a>
-          </p>
+          </div>
 
           <p>If you have questions, call or text
             <a href="tel:{{providerPhone}}" style="color:#2563eb;">{{providerPhone}}</a>
@@ -170,13 +172,14 @@ Appointment ID: {{appointmentId}}`,
 
           <p>Location: <strong>{{location}}</strong></p>
 
-          <p>
+          <div style="margin: 16px 0;">
             <a href="{{manageLink}}"
-              style="display:inline-block; margin-top:1em; padding:10px 16px; background:#2563eb; color:#fff;
-              text-decoration:none; border-radius:6px; font-weight:600;">
+              style="display:block; width:max-content; background:#2563eb; color:#fff;
+              text-decoration:none; border-radius:6px; font-weight:600;
+              padding:12px 20px; text-align:center;">
               Change / Cancel Appointment
             </a>
-          </p>
+          </div>
 
           <p>If you have questions, call or text
             <a href="tel:{{providerPhone}}" style="color:#2563eb;">{{providerPhone}}</a>

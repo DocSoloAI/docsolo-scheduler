@@ -22,7 +22,16 @@ serve(async () => {
       provider_id,
       patient:patients!appointments_patient_id_fkey ( first_name, last_name, email ),
       services ( name ),
-      providers ( subdomain, announcement )
+      providers (
+        subdomain,
+        announcement,
+        office_name,
+        phone,
+        street,
+        city,
+        state,
+        zip
+      )
     `)
     .gte("start_time", windowStart.toISOString())
     .lte("start_time", windowEnd.toISOString())
@@ -71,9 +80,10 @@ serve(async () => {
           service: service?.name || "Appointment",
           appointmentId: appt.id,
           manageLink: `https://${provider?.subdomain || "demo"}.bookthevisit.com/manage/${appt.id}`,
-          announcement: provider?.announcement?.trim()
-            ? provider.announcement
-            : null,
+          location: `${provider?.street || ""} ${provider?.city || ""} ${provider?.state || ""} ${provider?.zip || ""}`.trim(),
+          providerName: provider?.office_name || "",
+          providerPhone: provider?.phone || "",
+          announcement: provider?.announcement?.trim() ? provider.announcement : null,
         },
       });
 
