@@ -21,7 +21,7 @@ serve(async () => {
       provider_id,
       patients ( first_name, last_name, email ),
       services ( name ),
-      providers ( subdomain, announcement )   -- ✅ added announcement
+      providers ( subdomain, announcement )
     `)
     .gte("start_time", windowStart.toISOString())
     .lte("start_time", windowEnd.toISOString())
@@ -45,9 +45,10 @@ serve(async () => {
 
     const start = new Date(appt.start_time);
     const diffMinutes = (start.getTime() - now.getTime()) / 60000;
+
+    // ✅ Only 24-hour reminders (no 2-hour reminders)
     const is24hReminder = diffMinutes >= 1380 && diffMinutes <= 1470;
-    const is2hReminder = diffMinutes >= 90 && diffMinutes <= 150;
-    if (!is24hReminder && !is2hReminder) continue;
+    if (!is24hReminder) continue;
 
     await sendTemplatedEmail({
       templateType: "reminder",
@@ -66,7 +67,7 @@ serve(async () => {
       },
     });
 
-    console.log(`✅ Reminder sent to ${patient.email}`);
+    console.log(`✅ 24-hour reminder sent to ${patient.email}`);
   }
 
   return new Response("Done", { status: 200 });

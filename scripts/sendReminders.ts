@@ -68,12 +68,10 @@ async function sendReminders() {
     const start = new Date(appt.start_time);
     const diffMinutes = (start.getTime() - now.getTime()) / 60000;
 
-    // Day-before (≈24h) OR same-day (≈2h)
+    // ✅ Only 24-hour reminders
     const is24hReminder = diffMinutes >= 1380 && diffMinutes <= 1470; // 23h–24.5h
-    const is2hReminder = diffMinutes >= 90 && diffMinutes <= 150;     // 1.5h–2.5h
 
-    if (!is24hReminder && !is2hReminder) {
-      console.log(`⏭️ Skipping appt ${appt.id}, not in reminder window`);
+    if (!is24hReminder) {
       continue;
     }
 
