@@ -657,7 +657,7 @@ export default function BookingPage() {
           appointmentData: {
             patientName: fullName,
             patientEmail: normalizedEmail, // ✅ lowercase for consistency
-            patientPhone: cellPhone,
+            patientPhone: cellPhone || "(no phone provided)", // ✅ now safely included
             date: formattedDate,
             time: formattedTime,
             service: service.name,
@@ -671,6 +671,7 @@ export default function BookingPage() {
           },
         });
       }
+
 
       // 3. Mark confirmed
       setAppointmentId(appointmentId);
