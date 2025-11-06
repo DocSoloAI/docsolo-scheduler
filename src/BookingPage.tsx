@@ -641,7 +641,7 @@ export default function BookingPage() {
             .join(", "),
           officeName: providerOfficeName,
           providerPhone,
-          announcement: providerAnnouncement,
+          announcement: providerAnnouncement?.trim() ? providerAnnouncement : null,
           logoUrl: providerLogoUrl,
         },
       });

@@ -2,6 +2,8 @@
 import { Routes, Route } from "react-router-dom";
 import BookTheVisitLanding from "./pages/BookTheVisitLanding";
 import DocSoloLanding from "./pages/DocSoloLanding";
+import TermsPage from "./pages/TermsPage";
+import PrivacyPage from "./pages/PrivacyPage";
 import BookingPage from "./BookingPage";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 import ProviderDashboardPage from "./pages/ProviderDashboardPage";
@@ -119,12 +121,14 @@ export default function App() {
               </BookingWithProvider>
             }
           />
+          {/* ✅ Add Terms route */}
+          <Route path="/terms" element={<TermsPage />} />
+          <Route path="/privacy" element={<PrivacyPage />} />
         </Routes>
-        <Toaster richColors position="top-right" /> {/* ✅ add this */}
+        <Toaster richColors position="top-right" />
       </>
     );
   }
-
 
   // ---------- Fallback ----------
   return <div>Not found</div>;

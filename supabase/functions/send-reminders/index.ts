@@ -1,6 +1,5 @@
 // @ts-nocheck
 
-// supabase/functions/send-reminders/index.ts
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { supabase } from "../_shared/supabaseClient.ts";
 import { sendTemplatedEmail } from "../_shared/sendTemplatedEmail.ts";
@@ -22,7 +21,7 @@ serve(async () => {
       provider_id,
       patients ( first_name, last_name, email ),
       services ( name ),
-      providers ( subdomain )
+      providers ( subdomain, announcement )   -- ✅ added announcement
     `)
     .gte("start_time", windowStart.toISOString())
     .lte("start_time", windowEnd.toISOString())
@@ -60,8 +59,10 @@ serve(async () => {
         time: format(start, "h:mm a"),
         service: service?.name || "Appointment",
         appointmentId: appt.id,
-        // 🔄 switched to bookthevisit.com for patient-facing flow
         manageLink: `https://${provider?.subdomain || "demo"}.bookthevisit.com/manage/${appt.id}`,
+        // ✅ Only include announcement if it has text
+        announcement:
+          provider?.announcement?.trim() ? provider.announcement : null,
       },
     });
 

@@ -10,8 +10,9 @@ interface ReminderAppt {
   provider_id: string;
   patients: { first_name: string; last_name: string; email: string }[];
   services: { name: string }[];
-  providers: { office_name: string; send_reminders: boolean }[];
+  providers: { office_name: string; send_reminders: boolean; announcement?: string }[]; // ✅ add announcement
 }
+
 
 async function sendReminders() {
   console.log("📨 Checking for reminder emails...");
@@ -31,7 +32,7 @@ async function sendReminders() {
       provider_id,
       patients ( first_name, last_name, email ),
       services ( name ),
-      providers ( office_name, send_reminders )
+      providers ( office_name, send_reminders, announcement )
     `)
     .gte("start_time", windowStart.toISOString())
     .lte("start_time", windowEnd.toISOString())
@@ -92,6 +93,9 @@ async function sendReminders() {
         manageLink: `https://${(provider?.office_name || "demo")
           .replace(/\s+/g, "")
           .toLowerCase()}.bookthevisit.com/manage/${appt.id}`,
+        // ✅ Only include announcement if provider has one
+        announcement:
+          provider?.announcement?.trim() ? provider.announcement : null,
       },
     });
 
