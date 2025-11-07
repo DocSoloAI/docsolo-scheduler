@@ -20,6 +20,7 @@ serve(async () => {
       start_time,
       end_time,
       provider_id,
+      manage_token,
       patient:patients!appointments_patient_id_fkey ( first_name, last_name, email ),
       services ( name ),
       providers (
@@ -34,9 +35,12 @@ serve(async () => {
         timezone
       )
     `)
+
     .gte("start_time", windowStart.toISOString())
     .lte("start_time", windowEnd.toISOString())
-    .eq("status", "booked");
+    .eq("status", "booked")
+    .eq("reminder_sent", false);
+
 
   if (error) {
     console.error("❌ Error fetching appointments:", error.message);
@@ -83,7 +87,7 @@ serve(async () => {
           time: format(startLocal, "h:mm a"),
           service: service?.name || "Appointment",
           appointmentId: appt.id,
-          manageLink: `https://${provider?.subdomain || "demo"}.bookthevisit.com/manage/${appt.id}`,
+          manageLink: `https://${provider?.subdomain || "demo"}.bookthevisit.com/manage/${appt.id}?token=${appt.manage_token}`,
           officeName: provider?.office_name || "",
           providerName: provider?.first_name
             ? `${provider.first_name} ${provider.last_name}`
@@ -98,6 +102,12 @@ serve(async () => {
               : null,
         },
       });
+
+        // ✅ Mark this appointment so reminder never sends twice
+        await supabase
+          .from("appointments")
+          .update({ reminder_sent: true })
+          .eq("id", appt.id);
 
       console.log(`✅ Reminder sent to ${patient.email} (${providerTZ})`);
     } catch (err) {
