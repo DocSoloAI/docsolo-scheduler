@@ -551,11 +551,11 @@ export default function BookingPage() {
       // 🔒 Check for conflicts BEFORE inserting
       const { data: conflicts, error: conflictErr } = await supabase
         .from("appointments")
-        .select("id")
+        .select("id, start_time, end_time")
         .eq("provider_id", providerId)
         .eq("status", "booked")
-        .gte("end_time", startUTC)
-        .lte("start_time", endUTC);
+        // ✅ Proper overlap logic
+        .or(`and(start_time.lt.${endUTC},end_time.gt.${startUTC})`);
 
       if (conflictErr) throw conflictErr;
 
