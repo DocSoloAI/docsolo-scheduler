@@ -30,7 +30,8 @@ serve(async () => {
         street,
         city,
         state,
-        zip
+        zip,
+        timezone
       )
     `)
     .gte("start_time", windowStart.toISOString())
@@ -49,45 +50,56 @@ serve(async () => {
 
   for (const appt of appts) {
     try {
+      const patient = appt.patient;
+      const service = appt.services?.[0];
+      const provider = appt.providers?.[0];
+      if (!patient?.email || !provider) continue;
+
+      // 🕓 Convert to provider-local time
       const startRaw = appt.start_time;
       const startISO = startRaw
         ? startRaw.replace(" ", "T").replace(/\+00:?00?$/, "Z")
         : "";
 
       const startUTC = new Date(startISO);
-      const providerTZ = "America/New_York"; // ✅ could later be dynamic per provider
+      const providerTZ = provider.timezone || "America/New_York";
       const startLocal = new Date(
         startUTC.toLocaleString("en-US", { timeZone: providerTZ })
       );
 
+      // ⏰ Check 24-hour window
       const diffMinutes = (startUTC.getTime() - now.getTime()) / 60000;
       const is24hReminder = diffMinutes >= 1380 && diffMinutes <= 1470; // 23–24.5h window
       if (!is24hReminder) continue;
 
-      const patient = appt.patient;
-      const service = appt.services?.[0];
-      const provider = appt.providers?.[0];
-      if (!patient?.email) continue;
-
+      // ✉️ Send reminder
       await sendTemplatedEmail({
         templateType: "reminder",
         to: patient.email,
         providerId: appt.provider_id,
         appointmentData: {
-          patientName: `${patient.first_name} ${patient.last_name}`,
+          patientName: `${patient.first_name || ""} ${patient.last_name || ""}`.trim(),
           date: format(startLocal, "MMMM d, yyyy"),
           time: format(startLocal, "h:mm a"),
           service: service?.name || "Appointment",
           appointmentId: appt.id,
           manageLink: `https://${provider?.subdomain || "demo"}.bookthevisit.com/manage/${appt.id}`,
-          location: `${provider?.street || ""} ${provider?.city || ""} ${provider?.state || ""} ${provider?.zip || ""}`.trim(),
-          providerName: provider?.office_name || "",
+          officeName: provider?.office_name || "",
+          providerName: provider?.first_name
+            ? `${provider.first_name} ${provider.last_name}`
+            : provider?.office_name || "Your provider",
+          location: [provider?.street, provider?.city, provider?.state, provider?.zip]
+            .filter(Boolean)
+            .join(", "),
           providerPhone: provider?.phone || "",
-          announcement: provider?.announcement?.trim() ? provider.announcement : null,
+          announcement:
+            provider?.announcement?.trim() && provider.announcement.length > 0
+              ? provider.announcement
+              : null,
         },
       });
 
-      console.log(`✅ Reminder sent to ${patient.email}`);
+      console.log(`✅ Reminder sent to ${patient.email} (${providerTZ})`);
     } catch (err) {
       console.error("❌ Error inside loop for appt", appt.id, err);
     }
