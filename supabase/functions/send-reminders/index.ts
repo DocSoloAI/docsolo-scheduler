@@ -52,7 +52,7 @@ serve(async () => {
     try {
       const patient = appt.patient;
       const service = appt.services?.[0];
-      const provider = appt.providers?.[0];
+      const provider = appt.providers;
       if (!patient?.email || !provider) continue;
 
       // 🕓 Convert to provider-local time
