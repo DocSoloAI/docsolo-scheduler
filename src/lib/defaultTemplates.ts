@@ -4,14 +4,6 @@
  * One consistent design for all — only {{announcement}} and provider details change.
  */
 
-const DISCLAIMER_TEXT = "No-show appointments may be billed by your provider.";
-
-const DISCLAIMER_HTML = `
-  <p style="margin-top: 1.5em; font-size: 0.75rem; color: #666;">
-    ${DISCLAIMER_TEXT}
-  </p>
-`;
-
 export function defaultTemplates(providerId: string) {
   return [
     // ✅ CONFIRMATION
@@ -19,228 +11,248 @@ export function defaultTemplates(providerId: string) {
       provider_id: providerId,
       template_type: "confirmation",
       subject: "Appointment confirmed with {{providerName}} on {{date}} at {{time}}",
-      body: `Your appointment is confirmed.
+      body: `Your appointment is confirmed for {{date}} at {{time}}.
 
-{{announcement}}
+  {{announcement}}
 
-Your appointment with {{providerName}} is scheduled for:
+  Location: {{location}}
 
-{{date}} at {{time}}
+  Change / Cancel Appointment: {{manageLink}}
 
-Location: {{location}}
+  If you have questions, call or text {{providerPhone}}.
 
-Change / Cancel Appointment: {{manageLink}}
-
-If you have questions, call or text {{providerPhone}}.
-
-Appointment ID: {{appointmentId}}`,
+  Appointment ID: {{appointmentId}}`,
       html_body: `
         <div style="font-family: system-ui, sans-serif; max-width:600px; margin:auto; color:#111;">
-          <h2 style="font-size:1rem; font-weight:500; color:#15803d; margin-bottom:1em;">
-            Your appointment is confirmed.
+          <h2 style="font-size:1rem; font-weight:600; color:#15803d; margin-bottom:1.2em;">
+            Your appointment is confirmed
           </h2>
 
           {{#if announcement}}
-            <p style="background:#fef3c7; color:#92400e; padding:10px 14px; border-radius:6px; margin:1em 0; font-size:0.9rem;">
+            <p style="background:#fef3c7; color:#92400e; padding:10px 14px; border-radius:6px;
+              margin:1em 0; font-size:0.9rem; line-height:1.4;">
               {{announcement}}
             </p>
           {{/if}}
 
-          <p>Your appointment with <strong>{{providerName}}</strong> is scheduled for:</p>
-
-          <p style="font-weight:600; margin:1em 0;">{{date}} at {{time}}</p>
-
-          <p>Location: <strong>{{location}}</strong></p>
+          <p style="font-size:1rem; font-weight:600; margin:1em 0 1.5em;">
+            {{date}} at {{time}}
+          </p>
 
           <div style="margin: 16px 0;">
             <a href="{{manageLink}}"
-              style="display:block; width:max-content; background:#2563eb; color:#fff;
+              style="display:inline-block; background:#2563eb; color:#fff;
               text-decoration:none; border-radius:6px; font-weight:600;
-              padding:12px 20px; text-align:center;">
+              padding:12px 24px;">
               Change / Cancel Appointment
             </a>
           </div>
 
-          <p>If you have questions, call or text
+          <p style="margin:1.5em 0 0.25em; font-size:0.9rem; color:#555;">Location:</p>
+          <p style="font-size:0.95rem; font-weight:500; line-height:1.4;">
+            <strong>{{providerName}}</strong><br/>
+            {{location}}
+          </p>
+
+          <p style="margin-top:1.2em; font-size:0.8rem; color:#666;">
+            Note: To make changes to other visits, use the link from each appointment email.
+          </p>
+
+          <p style="margin-top:1.5em; font-size:0.9rem; color:#555;">
+            If you have questions, call or text
             <a href="tel:{{providerPhone}}" style="color:#2563eb;">{{providerPhone}}</a>
           </p>
 
-          <p style="margin-top:2em; font-size:0.85rem; color:#555;">
+          <p style="margin-top:2em; font-size:0.8rem; color:#777;">
             Appointment ID: {{appointmentId}}<br/>
+            No-show appointments may be billed by your provider.
           </p>
-
-          ${DISCLAIMER_HTML}
         </div>
       `,
     },
-
-    // ✅ REMINDER
+    // 🔵 REMINDER
     {
       provider_id: providerId,
       template_type: "reminder",
-      subject: "Upcoming appointment reminder with {{providerName}}",
-      body: `Upcoming appointment reminder
+      subject: "Reminder: your appointment with {{providerName}} is tomorrow at {{time}}",
+      body: `This is a friendly reminder for your appointment on {{date}} at {{time}}.
 
-{{announcement}}
+  {{announcement}}
 
-You have an appointment with {{providerName}} scheduled for:
+  Location: {{location}}
 
-{{date}} at {{time}}
+  Change / Cancel Appointment: {{manageLink}}
 
-Location: {{location}}
+  If you have questions, call or text {{providerPhone}}.
 
-Change / Cancel Appointment: {{manageLink}}
-
-If you have questions, call or text {{providerPhone}}.
-
-Appointment ID: {{appointmentId}}`,
+  Appointment ID: {{appointmentId}}`,
       html_body: `
         <div style="font-family: system-ui, sans-serif; max-width:600px; margin:auto; color:#111;">
-          <h2 style="font-size:1rem; font-weight:500; color:#2563eb; margin-bottom:1em;">
+          <h2 style="font-size:1rem; font-weight:600; color:#2563eb; margin-bottom:1.2em;">
             Upcoming appointment reminder
           </h2>
 
           {{#if announcement}}
-            <p style="background:#fef3c7; color:#92400e; padding:10px 14px; border-radius:6px; margin:1em 0; font-size:0.9rem;">
+            <p style="background:#fef3c7; color:#92400e; padding:10px 14px; border-radius:6px;
+              margin:1em 0; font-size:0.9rem; line-height:1.4;">
               {{announcement}}
             </p>
           {{/if}}
 
-          <p>You have an appointment with <strong>{{providerName}}</strong> scheduled for:</p>
-
-          <p style="font-weight:600; margin:1em 0;">{{date}} at {{time}}</p>
-
-          <p>Location: <strong>{{location}}</strong></p>
+          <p style="font-size:1rem; font-weight:600; margin:1em 0 1.5em;">
+            {{date}} at {{time}}
+          </p>
 
           <div style="margin: 16px 0;">
             <a href="{{manageLink}}"
-              style="display:block; width:max-content; background:#2563eb; color:#fff;
+              style="display:inline-block; background:#2563eb; color:#fff;
               text-decoration:none; border-radius:6px; font-weight:600;
-              padding:12px 20px; text-align:center;">
+              padding:12px 24px;">
               Change / Cancel Appointment
             </a>
           </div>
 
-          <p>If you have questions, call or text
+          <p style="margin:1.5em 0 0.25em; font-size:0.9rem; color:#555;">Location:</p>
+          <p style="font-size:0.95rem; font-weight:500; line-height:1.4;">
+            <strong>{{providerName}}</strong><br/>
+            {{location}}
+          </p>
+
+          <p style="margin-top:1.2em; font-size:0.8rem; color:#666;">
+            Note: To make changes to other visits, use the link from each appointment email.
+          </p>
+
+          <p style="margin-top:1.5em; font-size:0.9rem; color:#555;">
+            If you have questions, call or text
             <a href="tel:{{providerPhone}}" style="color:#2563eb;">{{providerPhone}}</a>
           </p>
 
-          <p style="margin-top:2em; font-size:0.85rem; color:#555;">
+          <p style="margin-top:2em; font-size:0.8rem; color:#777;">
             Appointment ID: {{appointmentId}}<br/>
+            No-show appointments may be billed by your provider.
           </p>
-
-          ${DISCLAIMER_HTML}
         </div>
       `,
     },
-
-    // ✅ UPDATE
+    // 🟡 UPDATE
     {
       provider_id: providerId,
       template_type: "update",
       subject: "Your appointment details have changed",
-      body: `Your appointment details have changed.
+      body: `Your appointment details have been updated.
 
-{{announcement}}
+  {{announcement}}
 
-Your appointment with {{providerName}} has been updated:
+  New date/time: {{date}} at {{time}}
 
-{{date}} at {{time}}
+  Location: {{location}}
 
-Location: {{location}}
+  Change / Cancel Appointment: {{manageLink}}
 
-Change / Cancel Appointment: {{manageLink}}
+  If you have questions, call or text {{providerPhone}}.
 
-If you have questions, call or text {{providerPhone}}.
-
-Appointment ID: {{appointmentId}}`,
+  Appointment ID: {{appointmentId}}`,
       html_body: `
         <div style="font-family: system-ui, sans-serif; max-width:600px; margin:auto; color:#111;">
-          <h2 style="font-size:1rem; font-weight:500; color:#f59e0b; margin-bottom:1em;">
-            Your appointment details have changed.
+          <h2 style="font-size:1rem; font-weight:600; color:#f59e0b; margin-bottom:1.2em;">
+            Your appointment details have changed
           </h2>
 
           {{#if announcement}}
-            <p style="background:#fef3c7; color:#92400e; padding:10px 14px; border-radius:6px; margin:1em 0; font-size:0.9rem;">
+            <p style="background:#fef3c7; color:#92400e; padding:10px 14px; border-radius:6px;
+              margin:1em 0; font-size:0.9rem; line-height:1.4;">
               {{announcement}}
             </p>
           {{/if}}
 
-          <p>Your appointment with <strong>{{providerName}}</strong> has been updated:</p>
-
-          <p style="font-weight:600; margin:1em 0;">{{date}} at {{time}}</p>
-
-          <p>Location: <strong>{{location}}</strong></p>
+          <p style="font-size:1rem; font-weight:600; margin:1em 0 1.5em;">
+            {{date}} at {{time}}
+          </p>
 
           <div style="margin: 16px 0;">
             <a href="{{manageLink}}"
-              style="display:block; width:max-content; background:#2563eb; color:#fff;
+              style="display:inline-block; background:#2563eb; color:#fff;
               text-decoration:none; border-radius:6px; font-weight:600;
-              padding:12px 20px; text-align:center;">
+              padding:12px 24px;">
               Change / Cancel Appointment
             </a>
           </div>
 
-          <p>If you have questions, call or text
+          <p style="margin:1.5em 0 0.25em; font-size:0.9rem; color:#555;">Location:</p>
+          <p style="font-size:0.95rem; font-weight:500; line-height:1.4;">
+            <strong>{{providerName}}</strong><br/>
+            {{location}}
+          </p>
+
+          <p style="margin-top:1.2em; font-size:0.8rem; color:#666;">
+            Note: To make changes to other visits, use the link from each appointment email.
+          </p>
+
+          <p style="margin-top:1.5em; font-size:0.9rem; color:#555;">
+            If you have questions, call or text
             <a href="tel:{{providerPhone}}" style="color:#2563eb;">{{providerPhone}}</a>
           </p>
 
-          <p style="margin-top:2em; font-size:0.85rem; color:#555;">
+          <p style="margin-top:2em; font-size:0.8rem; color:#777;">
             Appointment ID: {{appointmentId}}<br/>
+            No-show appointments may be billed by your provider.
           </p>
-
-          ${DISCLAIMER_HTML}
         </div>
       `,
     },
-
-    // ✅ CANCELLATION
+    // 🔴 CANCELLATION
     {
       provider_id: providerId,
       template_type: "cancellation",
       subject: "Appointment cancelled: {{date}} at {{time}}",
-      body: `Your appointment has been cancelled.
+      body: `Your appointment scheduled for {{date}} at {{time}} has been cancelled.
 
-{{announcement}}
+  {{announcement}}
 
-The appointment scheduled for {{date}} at {{time}} has been cancelled.
+  If you'd like to schedule another appointment, visit: https://{{subdomain}}.bookthevisit.com
 
-If you'd like to schedule another appointment, visit: https://{{subdomain}}.bookthevisit.com
+  Questions? Call or text {{providerPhone}}.
 
-Questions? Call or text {{providerPhone}}.
-
-Appointment ID: {{appointmentId}}`,
+  Appointment ID: {{appointmentId}}`,
       html_body: `
         <div style="font-family: system-ui, sans-serif; max-width:600px; margin:auto; color:#111;">
-          <h2 style="font-size:1rem; font-weight:500; color:#dc2626; margin-bottom:1em;">
-            Your appointment has been cancelled.
+          <h2 style="font-size:1rem; font-weight:600; color:#dc2626; margin-bottom:1.2em;">
+            Your appointment has been cancelled
           </h2>
 
           {{#if announcement}}
-            <p style="background:#fef3c7; color:#92400e; padding:10px 14px; border-radius:6px; margin:1em 0; font-size:0.9rem;">
+            <p style="background:#fef3c7; color:#92400e; padding:10px 14px; border-radius:6px;
+              margin:1em 0; font-size:0.9rem; line-height:1.4;">
               {{announcement}}
             </p>
           {{/if}}
 
-          <p>The appointment scheduled for <strong>{{date}} at {{time}}</strong> has been cancelled.</p>
+          <p style="font-size:1rem; font-weight:500; margin:1em 0 1.5em;">
+            {{date}} at {{time}}
+          </p>
 
-          <p>If you'd like to schedule another appointment, use the link below:</p>
+          <p style="margin:1.5em 0; font-size:0.95rem;">
+            If you'd like to schedule another appointment, click below:
+          </p>
 
-          <p>
+          <div style="margin: 16px 0;">
             <a href="https://{{subdomain}}.bookthevisit.com"
-              style="display:inline-block; margin-top:1em; padding:10px 16px; background:#2563eb; color:#fff;
-              text-decoration:none; border-radius:6px; font-weight:600;">
+              style="display:inline-block; background:#2563eb; color:#fff;
+              text-decoration:none; border-radius:6px; font-weight:600;
+              padding:12px 24px;">
               Book Another Appointment
             </a>
-          </p>
+          </div>
 
-          <p style="margin-top:2em; font-size:0.85rem; color:#555;">
-            Appointment ID: {{appointmentId}}<br/>
+          <p style="margin-top:1.5em; font-size:0.9rem; color:#555;">
             Questions? Call or text
-            <a href="tel:{{providerPhone}}" style="color:#2563eb;">{{providerPhone}}</a><br/>
+            <a href="tel:{{providerPhone}}" style="color:#2563eb;">{{providerPhone}}</a>
           </p>
 
-          ${DISCLAIMER_HTML}
+          <p style="margin-top:2em; font-size:0.8rem; color:#777;">
+            Appointment ID: {{appointmentId}}<br/>
+            No-show appointments may be billed by your provider.
+          </p>
         </div>
       `,
     },
@@ -261,14 +273,20 @@ Appointment ID: {{appointmentId}}`,
     Appointment ID: {{appointmentId}}
       `,
       html_body: `
-    <p><strong>New Appointment</strong></p>
-    <p>Patient: {{patientName}}</p>
-    <p>Email: {{patientEmail}}</p>
-    <p>Phone: {{patientPhone}}</p>
-    <p>Service: {{service}}</p>
-    <p>Date/Time: {{date}} at {{time}}</p>
-    {{#if patientNote}}<p><em>Notes from patient:</em> "{{patientNote}}"</p>{{/if}}
-    <p>Appointment ID: {{appointmentId}}</p>
+        <div style="font-family: system-ui, sans-serif; max-width:600px; margin:auto; color:#111;">
+          <h2 style="font-size:1rem; font-weight:600; color:#15803d; margin-bottom:1em;">New Appointment</h2>
+          <p><strong>Patient:</strong> {{patientName}}</p>
+          <p><strong>Email:</strong> {{patientEmail}}</p>
+          <p><strong>Phone:</strong> {{patientPhone}}</p>
+          <p><strong>Service:</strong> {{service}}</p>
+          <p><strong>Date/Time:</strong> {{date}} at {{time}}</p>
+          {{#if patientNote}}
+            <p style="background:#fef3c7; color:#92400e; padding:10px 12px; border-radius:6px; margin-top:1em; font-size:0.9rem;">
+              <strong>Patient Note:</strong> "{{patientNote}}"
+            </p>
+          {{/if}}
+          <p style="margin-top:1.5em; font-size:0.8rem; color:#777;">Appointment ID: {{appointmentId}}</p>
+        </div>
       `,
     },
     {
@@ -286,14 +304,20 @@ Appointment ID: {{appointmentId}}`,
     Appointment ID: {{appointmentId}}
       `,
       html_body: `
-    <p><strong>Updated Appointment</strong></p>
-    <p>Patient: {{patientName}}</p>
-    <p>Email: {{patientEmail}}</p>
-    <p>Phone: {{patientPhone}}</p>
-    <p>Service: {{service}}</p>
-    <p>New Date/Time: {{date}} at {{time}}</p>
-    {{#if patientNote}}<p><em>Notes from patient:</em> "{{patientNote}}"</p>{{/if}}
-    <p>Appointment ID: {{appointmentId}}</p>
+        <div style="font-family: system-ui, sans-serif; max-width:600px; margin:auto; color:#111;">
+          <h2 style="font-size:1rem; font-weight:600; color:#f59e0b; margin-bottom:1em;">Updated Appointment</h2>
+          <p><strong>Patient:</strong> {{patientName}}</p>
+          <p><strong>Email:</strong> {{patientEmail}}</p>
+          <p><strong>Phone:</strong> {{patientPhone}}</p>
+          <p><strong>Service:</strong> {{service}}</p>
+          <p><strong>New Date/Time:</strong> {{date}} at {{time}}</p>
+          {{#if patientNote}}
+            <p style="background:#fef3c7; color:#92400e; padding:10px 12px; border-radius:6px; margin-top:1em; font-size:0.9rem;">
+              <strong>Patient Note:</strong> "{{patientNote}}"
+            </p>
+          {{/if}}
+          <p style="margin-top:1.5em; font-size:0.8rem; color:#777;">Appointment ID: {{appointmentId}}</p>
+        </div>
       `,
     },
     {
@@ -311,14 +335,20 @@ Appointment ID: {{appointmentId}}`,
     Appointment ID: {{appointmentId}}
       `,
       html_body: `
-    <p><strong>Cancelled Appointment</strong></p>
-    <p>Patient: {{patientName}}</p>
-    <p>Email: {{patientEmail}}</p>
-    <p>Phone: {{patientPhone}}</p>
-    <p>Service: {{service}}</p>
-    <p>Was scheduled for: {{date}} at {{time}}</p>
-    {{#if patientNote}}<p><em>Notes from patient:</em> "{{patientNote}}"</p>{{/if}}
-    <p>Appointment ID: {{appointmentId}}</p>
+        <div style="font-family: system-ui, sans-serif; max-width:600px; margin:auto; color:#111;">
+          <h2 style="font-size:1rem; font-weight:600; color:#dc2626; margin-bottom:1em;">Cancelled Appointment</h2>
+          <p><strong>Patient:</strong> {{patientName}}</p>
+          <p><strong>Email:</strong> {{patientEmail}}</p>
+          <p><strong>Phone:</strong> {{patientPhone}}</p>
+          <p><strong>Service:</strong> {{service}}</p>
+          <p><strong>Was scheduled for:</strong> {{date}} at {{time}}</p>
+          {{#if patientNote}}
+            <p style="background:#fef3c7; color:#92400e; padding:10px 12px; border-radius:6px; margin-top:1em; font-size:0.9rem;">
+              <strong>Patient Note:</strong> "{{patientNote}}"
+            </p>
+          {{/if}}
+          <p style="margin-top:1.5em; font-size:0.8rem; color:#777;">Appointment ID: {{appointmentId}}</p>
+        </div>
       `,
     },
   ];
