@@ -67,19 +67,13 @@ serve(async () => {
 
       const startUTC = new Date(startISO);
       const providerTZ = provider.timezone || "America/New_York";
+
+      // Convert both times to provider-local time
       const startLocal = new Date(
         startUTC.toLocaleString("en-US", { timeZone: providerTZ })
       );
-
-      // 🕓 Use provider-local clock for comparison
-      const providerTZ = provider.timezone || "America/New_York";
-
-      // Convert both times to the provider’s local zone
       const nowLocal = new Date(
         new Date().toLocaleString("en-US", { timeZone: providerTZ })
-      );
-      const startLocal = new Date(
-        startUTC.toLocaleString("en-US", { timeZone: providerTZ })
       );
 
       // Calculate difference in minutes (local time)
@@ -123,18 +117,17 @@ serve(async () => {
         },
       });
 
-        // ✅ Mark this appointment so reminder never sends twice
-        await supabase
-          .from("appointments")
-          .update({ reminder_sent: true })
-          .eq("id", appt.id);
+      // ✅ Mark this appointment so reminder never sends twice
+      await supabase
+        .from("appointments")
+        .update({ reminder_sent: true })
+        .eq("id", appt.id);
 
       console.log(`✅ Reminder sent to ${patient.email} (${providerTZ})`);
     } catch (err) {
       console.error("❌ Error inside loop for appt", appt.id, err);
     }
   }
-
   console.log("🏁 Reminder job complete.");
   return new Response("Done", { status: 200 });
 });
