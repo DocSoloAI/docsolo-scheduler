@@ -71,9 +71,29 @@ serve(async () => {
         startUTC.toLocaleString("en-US", { timeZone: providerTZ })
       );
 
-      // ⏰ Check 24-hour window
-      const diffMinutes = (startUTC.getTime() - now.getTime()) / 60000;
-      const is24hReminder = diffMinutes >= 1380 && diffMinutes <= 1470; // 23–24.5h window
+      // 🕓 Use provider-local clock for comparison
+      const providerTZ = provider.timezone || "America/New_York";
+
+      // Convert both times to the provider’s local zone
+      const nowLocal = new Date(
+        new Date().toLocaleString("en-US", { timeZone: providerTZ })
+      );
+      const startLocal = new Date(
+        startUTC.toLocaleString("en-US", { timeZone: providerTZ })
+      );
+
+      // Calculate difference in minutes (local time)
+      const diffMinutes = (startLocal.getTime() - nowLocal.getTime()) / 60000;
+
+      // Allow 22–25h window to catch any slight drift
+      const is24hReminder = diffMinutes >= 1320 && diffMinutes <= 1500;
+
+      console.log(
+        `🧠 DEBUG: ${appt.id} | ${diffMinutes.toFixed(
+          1
+        )} min away | providerTZ=${providerTZ}`
+      );
+
       if (!is24hReminder) continue;
 
       // ✉️ Send reminder
