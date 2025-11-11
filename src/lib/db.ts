@@ -6,6 +6,10 @@ interface PatientInput {
   email: string;
   cell_phone?: string;
   provider_id: string;
+
+  // ✅ New consent flags
+  allow_email?: boolean;
+  allow_text?: boolean;
 }
 
 interface AppointmentInput {
@@ -53,6 +57,10 @@ export async function upsertPatientAndCreateAppointment(
         cell_phone: patient.cell_phone,
         provider_id: patient.provider_id,
         last_seen_at: new Date().toISOString(),
+
+        // ✅ New consent flags (will default true if not provided)
+        allow_email: patient.allow_email ?? true,
+        allow_text: patient.allow_text ?? true,
       })
       .select("id")
       .single();

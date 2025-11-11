@@ -148,8 +148,7 @@ export default function BookingPage() {
   const [secondaryInsurance, setSecondaryInsurance] = useState("");
   const [secondaryID, setSecondaryID] = useState("");
   const [comments, setComments] = useState("");
-  const [allowEmail, setAllowEmail] = useState(true);
-  const [allowText, setAllowText] = useState(true);
+  const [allowText, setAllowText] = useState(false);
   const [formError, setFormError] = useState("");
   const [rescheduleLoaded, setRescheduleLoaded] = useState(false);
   const [providerTimezone, setProviderTimezone] = useState("America/New_York");
@@ -595,28 +594,32 @@ export default function BookingPage() {
           .single();
         if (tokenError) throw tokenError;
         manageToken = existing?.manage_token ?? null;
-      } else {
-        // 🆕 Use helper for patient upsert + appointment insert
-        const newAppt = await upsertPatientAndCreateAppointment(
-          {
-            first_name: firstName,
-            last_name: lastName,
-            email: normalizedEmail,
-            cell_phone: cellPhone,
-            provider_id: providerId,
-          },
-          {
-            service_id: serviceId,
-            start_time: fromTZToUTC(start, providerTimezone).toISOString(),
-            end_time: fromTZToUTC(end, providerTimezone).toISOString(),
-            status: "booked",
-            patient_note: comments || null,
-          }
-        );
+        } else {
+          // 🆕 Use helper for patient upsert + appointment insert
+          const newAppt = await upsertPatientAndCreateAppointment(
+            {
+              first_name: firstName,
+              last_name: lastName,
+              email: normalizedEmail,
+              cell_phone: cellPhone,
+              provider_id: providerId,
 
-        appointmentId = newAppt.id;
-        manageToken = newAppt.manage_token; // ✅ capture token
-      }
+              // ✅ New consent flags
+              allow_text: allowText,
+            },
+            {
+              service_id: serviceId,
+              start_time: fromTZToUTC(start, providerTimezone).toISOString(),
+              end_time: fromTZToUTC(end, providerTimezone).toISOString(),
+              status: "booked",
+              patient_note: comments || null,
+            }
+          );
+
+          appointmentId = newAppt.id;
+          manageToken = newAppt.manage_token; // ✅ capture token
+        }
+
 
       if (!appointmentId || !manageToken) throw new Error("Appointment ID or token missing");
 
@@ -1258,23 +1261,15 @@ export default function BookingPage() {
                           </div>
                         </div>
 
-                        {/* Preferences */}
-                        <div className="flex flex-col gap-2">
-                          <label className="flex items-center gap-2">
-                            <input
-                              type="checkbox"
-                              checked={allowEmail}
-                              onChange={(e) => setAllowEmail(e.target.checked)}
-                            />
-                            Allow Email Messages
-                          </label>
-                          <label className="flex items-center gap-2">
+                        {/* Preferences (texting only for future use) */}
+                        <div className="flex flex-col gap-2 mt-4">
+                          <label className="flex items-center gap-2 text-sm text-gray-700">
                             <input
                               type="checkbox"
                               checked={allowText}
                               onChange={(e) => setAllowText(e.target.checked)}
                             />
-                            Allow Text Messages
+                            Allow texted appointment reminders
                           </label>
                         </div>
                       </div>
