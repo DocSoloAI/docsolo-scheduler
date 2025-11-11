@@ -36,6 +36,12 @@ export async function sendTemplatedEmail({
   providerId,
   appointmentData,
 }: SendTemplatedEmailOptions) {
+
+  // 🕓 Normalize time formatting: remove leading zero if present
+  if (appointmentData?.time && appointmentData.time.startsWith("0")) {
+    appointmentData.time = appointmentData.time.slice(1);
+  }
+  
   // fetch template
   const { data: template, error } = await supabase
     .from("email_templates")
