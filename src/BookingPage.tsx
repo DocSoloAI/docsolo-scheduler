@@ -32,6 +32,7 @@ export default function BookingPage() {
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [bookingComplete, setBookingComplete] = useState(false);
   const [manageToken, setManageToken] = useState<string | null>(null);
+  const [showTextOptIn, setShowTextOptIn] = useState(false);
 
   const [searchParams] = useSearchParams();
   const rescheduleId = searchParams.get("reschedule");
@@ -618,6 +619,12 @@ export default function BookingPage() {
 
           appointmentId = newAppt.id;
           manageToken = newAppt.manage_token; // ✅ capture token
+          let existingAllowText = newAppt.existingPatientAllowText;
+
+          // 🧠 If returning patient has never opted into text reminders, prompt once (after short delay)
+          if (existingAllowText === null) {
+            setTimeout(() => setShowTextOptIn(true), 2000); // 2.5s after confirmation UI
+          }
         }
 
 
@@ -676,7 +683,6 @@ export default function BookingPage() {
           },
         });
       }
-
 
       // 3. Mark confirmed
       setAppointmentId(appointmentId);
@@ -1427,6 +1433,63 @@ export default function BookingPage() {
                     </Button>
                   </div>
                 )}
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+        {/* 🟢 One-Time Text Reminder Opt-In Modal */}
+        <AnimatePresence>
+          {showTextOptIn && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50"
+            >
+              <motion.div
+                initial={{ scale: 0.9 }}
+                animate={{ scale: 1 }}
+                exit={{ scale: 0.9 }}
+                className="bg-white rounded-lg shadow-xl max-w-md w-full p-6 text-center"
+              >
+                <h2 className="text-xl font-semibold text-gray-900 mb-3">
+                  Allow Texted Appointment Reminders?
+                </h2>
+                <p className="text-gray-700 text-sm mb-6 leading-relaxed">
+                  You can choose to receive occasional text message reminders for upcoming
+                  appointments. We’ll never send marketing messages.
+                </p>
+
+                <div className="flex gap-3">
+                  <Button
+                    className="flex-1 bg-gray-200 text-gray-800 hover:bg-gray-300"
+                    onClick={() => setShowTextOptIn(false)}
+                  >
+                    No, Thanks
+                  </Button>
+                  <Button
+                    className="flex-1 bg-blue-600 text-white hover:bg-green-600"
+                    onClick={async () => {
+                      try {
+                        // 🧩 Save consent immediately
+                        await supabase
+                          .from("patients")
+                          .update({ allow_text: true })
+                          .eq("email", email.trim().toLowerCase())
+                          .eq("provider_id", providerId);
+
+                        toast.success("Text reminders enabled!");
+                      } catch (err) {
+                        console.error("❌ Error updating consent:", err);
+                        toast.error("Could not save your preference.");
+                      } finally {
+                        setShowTextOptIn(false);
+                      }
+                    }}
+                  >
+                    Yes, Enable Text Reminders
+                  </Button>
+                </div>
               </motion.div>
             </motion.div>
           )}

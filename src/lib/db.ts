@@ -27,7 +27,7 @@ export async function upsertPatientAndCreateAppointment(
   // 1. Try to find existing patient by email or cell_phone
   let { data: existingPatients, error: lookupError } = await supabase
     .from("patients")
-    .select("id")
+    .select("id, allow_text")
     .eq("provider_id", patient.provider_id)
     .or(`email.eq.${patient.email},cell_phone.eq.${patient.cell_phone ?? ""}`)
     .limit(1);
@@ -86,5 +86,8 @@ export async function upsertPatientAndCreateAppointment(
 
   if (apptError) throw apptError;
 
-  return newAppt;
+  return { 
+    ...newAppt, 
+    existingPatientAllowText: existingPatients?.[0]?.allow_text ?? null 
+  };
 }
