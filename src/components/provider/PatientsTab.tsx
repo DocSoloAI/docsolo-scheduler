@@ -28,6 +28,7 @@ interface Patient {
   visit_count?: number;
   last_appointment?: string | null;
   manual_visit_count?: number | null;
+  allow_text?: boolean;
 }
 
 export default function PatientsTab({ providerId }: PatientsTabProps) {
@@ -128,8 +129,6 @@ export default function PatientsTab({ providerId }: PatientsTabProps) {
     setModalOpen(true);
   };
 
-
-
   // 💾 Confirm Save
   const handleSaveClick = () => {
     setConfirmOpen(true);
@@ -154,7 +153,8 @@ const savePatient = async () => {
           last_name: form.last_name.trim(),
           ...(form.email ? { email: form.email.trim() } : {}),
           cell_phone: form.cell_phone?.trim() || null,
-          manual_visit_count: form.manual_visit_count ?? null, // ✅ added
+          manual_visit_count: form.manual_visit_count ?? null,
+          allow_text: form.allow_text ?? true, // ✅ new field
         })
         .eq("id", editing.id);
 
@@ -181,6 +181,7 @@ const savePatient = async () => {
             email: form.email?.trim() || null,
             cell_phone: form.cell_phone?.trim() || null,
             manual_visit_count: form.manual_visit_count ?? null, // ✅ added
+            allow_text: form.allow_text ?? true,
           },
         ])
         .select()
@@ -373,6 +374,19 @@ const savePatient = async () => {
                   setForm({ ...form, cell_phone: e.target.value })
                 }
               />
+              {/* ✅ Allow Text Reminders */}
+              <div className="flex items-center gap-2 mt-2">
+                <input
+                  type="checkbox"
+                  checked={form.allow_text ?? true}
+                  onChange={(e) =>
+                    setForm({ ...form, allow_text: e.target.checked })
+                  }
+                />
+                <label className="text-sm text-gray-700">
+                  Allow text message appointment reminders
+                </label>
+              </div>
             </div>
 
             {/* Manual Visit Count */}
@@ -441,7 +455,6 @@ const savePatient = async () => {
                       );
                     })}
                   </ul>
-
                 )}
               </div>
             )}
