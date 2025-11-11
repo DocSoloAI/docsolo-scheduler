@@ -112,7 +112,7 @@ export default function ManageAppointmentPage() {
         id,
         start_time,
         services ( name ),
-        patients ( first_name, last_name, email ),
+        patients ( first_name, last_name, email, cell_phone, home_phone ),
         providers ( id, office_name, email, phone, street, city, state, zip )
       `)
       .eq("id", appointment.id)
@@ -194,6 +194,7 @@ export default function ManageAppointmentPage() {
               appointmentData: {
                 patientName,
                 patientEmail,
+                patientPhone: patient?.cell_phone || patient?.home_phone || "",
                 date: formattedDate,
                 time: formattedTime,
                 service: service?.name,
