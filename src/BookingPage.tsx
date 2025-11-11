@@ -1358,18 +1358,20 @@ export default function BookingPage() {
                 initial={{ scale: 0.9 }}
                 animate={{ scale: 1 }}
                 exit={{ scale: 0.9 }}
-                className="bg-white rounded-lg shadow-lg max-w-md w-full p-6 text-center"
+                className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 text-center border border-gray-100"
               >
                 {!confirmed ? (
                   <>
                     <p className="mb-4 text-gray-700 font-medium">
                       Please carefully double-check your details:
                     </p>
-                    <p className="font-semibold text-lg">
+
+                    <p className="font-semibold text-lg text-gray-900">
                       {firstName} {lastName}
                     </p>
-                    <p className="font-semibold text-gray-800">{email}</p>
+                    <p className="font-medium text-gray-800">{email}</p>
                     {cellPhone && <p className="text-gray-700">{cellPhone}</p>}
+
                     {selectedDate && selectedTime && (
                       <p className="text-sm text-gray-600 mt-2">
                         {format(
@@ -1382,26 +1384,33 @@ export default function BookingPage() {
                       </p>
                     )}
 
+                    {/* Button Row */}
                     <div className="flex gap-3 mt-6">
                       <Button
-                        className="flex-1 bg-gray-200 text-gray-800"
+                        className="flex-1 bg-gray-100 text-gray-700 hover:bg-red-100 hover:text-red-600 border border-gray-200 transition-colors rounded-lg font-medium"
                         onClick={() => setShowConfirmModal(false)}
                       >
                         Go Back & Fix
                       </Button>
+
                       <Button
-                        className="flex-1 bg-blue-600 text-white"
+                        disabled={confirmed}
+                        className={`flex-1 font-semibold rounded-lg transition-colors ${
+                          confirmed
+                            ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                            : "bg-blue-600 text-white hover:bg-green-600"
+                        }`}
                         onClick={async () => {
+                          if (confirmed) return; // 🚫 Prevent double click
                           await handleConfirm();
-                          // keep modal open, just flip to success view
                         }}
                       >
-                        Confirm Appointment
+                        {confirmed ? "Confirming..." : "Confirm Appointment"}
                       </Button>
                     </div>
                   </>
                 ) : (
-                  // ✅ Success view replaces double-check content
+                  // ✅ Success View (unchanged logic, just visual polish)
                   <div>
                     <div className="text-6xl mb-4">✅</div>
                     <h2 className="text-2xl font-bold text-green-700 mb-4">
@@ -1411,7 +1420,7 @@ export default function BookingPage() {
                       We’ve emailed you the details of your appointment.
                     </p>
                     <Button
-                      className="bg-blue-600 text-white"
+                      className="bg-blue-600 hover:bg-green-600 text-white font-medium px-6 py-2 rounded-lg transition-colors"
                       onClick={() => setShowConfirmModal(false)}
                     >
                       Close
