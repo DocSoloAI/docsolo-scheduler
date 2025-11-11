@@ -126,6 +126,8 @@ export default function BookingPage() {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>();
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
   const [confirmed, setConfirmed] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+
   const [selectedService, setSelectedService] = useState<string | null>(null);
 
   // Shared fields
@@ -1361,64 +1363,59 @@ export default function BookingPage() {
                 className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 text-center border border-gray-100"
               >
                 {!confirmed ? (
-                  (() => {
-                    const [confirming, setConfirming] = useState(false);
-                    return (
-                      <>
-                        <p className="mb-4 text-gray-700 font-medium">
-                          Please carefully double-check your details:
-                        </p>
+                  <>
+                    <p className="mb-4 text-gray-700 font-medium">
+                      Please carefully double-check your details:
+                    </p>
 
-                        <p className="font-semibold text-lg text-gray-900">
-                          {firstName} {lastName}
-                        </p>
-                        <p className="font-medium text-gray-800">{email}</p>
-                        {cellPhone && <p className="text-gray-700">{cellPhone}</p>}
+                    <p className="font-semibold text-lg text-gray-900">
+                      {firstName} {lastName}
+                    </p>
+                    <p className="font-medium text-gray-800">{email}</p>
+                    {cellPhone && <p className="text-gray-700">{cellPhone}</p>}
 
-                        {selectedDate && selectedTime && (
-                          <p className="text-sm text-gray-600 mt-2">
-                            {format(
-                              selectedDate,
-                              selectedDate.getFullYear() === new Date().getFullYear()
-                                ? "EEEE, MMMM d"
-                                : "EEEE, MMMM d, yyyy"
-                            )}{" "}
-                            at {selectedTime}
-                          </p>
-                        )}
+                    {selectedDate && selectedTime && (
+                      <p className="text-sm text-gray-600 mt-2">
+                        {format(
+                          selectedDate,
+                          selectedDate.getFullYear() === new Date().getFullYear()
+                            ? "EEEE, MMMM d"
+                            : "EEEE, MMMM d, yyyy"
+                        )}{" "}
+                        at {selectedTime}
+                      </p>
+                    )}
 
-                        {/* Buttons */}
-                        <div className="flex gap-3 mt-6">
-                          <Button
-                            className="flex-1 bg-gray-100 text-gray-700 hover:bg-red-100 hover:text-red-600 border border-gray-200 transition-colors rounded-lg font-medium"
-                            onClick={() => setShowConfirmModal(false)}
-                            disabled={confirming}
-                          >
-                            Go Back & Fix
-                          </Button>
+                    {/* Buttons */}
+                    <div className="flex gap-3 mt-6">
+                      <Button
+                        className="flex-1 bg-gray-100 text-gray-700 hover:bg-red-100 hover:text-red-600 border border-gray-200 transition-colors rounded-lg font-medium"
+                        onClick={() => setShowConfirmModal(false)}
+                        disabled={confirming}
+                      >
+                        Go Back & Fix
+                      </Button>
 
-                          <Button
-                            disabled={confirming}
-                            className={`flex-1 font-semibold rounded-lg transition-colors ${
-                              confirming
-                                ? "bg-gray-300 text-gray-500 cursor-not-allowed"
-                                : "bg-blue-600 text-white hover:bg-green-600"
-                            }`}
-                            onClick={async () => {
-                              if (confirming) return;
-                              setConfirming(true);
-                              await handleConfirm();
-                              setConfirming(false);
-                            }}
-                          >
-                            {confirming ? "Confirming..." : "Confirm Appointment"}
-                          </Button>
-                        </div>
-                      </>
-                    );
-                  })()
+                      <Button
+                        disabled={confirming}
+                        className={`flex-1 font-semibold rounded-lg transition-colors ${
+                          confirming
+                            ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                            : "bg-blue-600 text-white hover:bg-green-600"
+                        }`}
+                        onClick={async () => {
+                          if (confirming) return;
+                          setConfirming(true);
+                          await handleConfirm();
+                          setConfirming(false);
+                        }}
+                      >
+                        {confirming ? "Confirming..." : "Confirm Appointment"}
+                      </Button>
+                    </div>
+                  </>
                 ) : (
-                  // ✅ Success view
+                  // ✅ Success View
                   <div>
                     <div className="text-6xl mb-4">✅</div>
                     <h2 className="text-2xl font-bold text-green-700 mb-4">
