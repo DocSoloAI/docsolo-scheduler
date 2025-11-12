@@ -36,6 +36,7 @@ export default function BookingPage() {
 
   const [searchParams] = useSearchParams();
   const rescheduleId = searchParams.get("reschedule");
+  const BOOKING_DOMAIN = "bookthevisit.com";
 
   useEffect(() => {
     if (rescheduleId) {
@@ -743,8 +744,7 @@ export default function BookingPage() {
           time: formattedTime,
           service: service.name,
           appointmentId,
-          manageLink: `https://${getSubdomain()}.bookthevisit.com/manage/${appointmentId}?token=${manageToken}`,
-          location: [providerStreet, providerCity, providerState, providerZip]
+          manageLink: `https://${getSubdomain()}.${BOOKING_DOMAIN}/manage/${appointmentId}?token=${manageToken}`,          location: [providerStreet, providerCity, providerState, providerZip]
             .filter(Boolean)
             .join(", "),
           officeName: providerOfficeName,
@@ -1472,13 +1472,13 @@ export default function BookingPage() {
 
             <div className="flex flex-col sm:flex-row justify-center gap-4 mt-4 w-full max-w-sm mx-auto">
               <a
-                href={`https://${getSubdomain()}.bookthevisit.com`}
+                href={`https://${getSubdomain()}.${BOOKING_DOMAIN}`}
                 className="inline-block bg-blue-600 hover:bg-blue-700 text-white text-sm w-full sm:flex-1 text-center rounded-full py-2 px-4 font-medium"
               >
                 Schedule Another Appointment
               </a>
               <a
-                href={`https://${getSubdomain()}.bookthevisit.com/manage/${appointmentId}?token=${manageToken}`}
+                href={`https://${getSubdomain()}.${BOOKING_DOMAIN}/manage/${appointmentId}?token=${manageToken}`}
                 className="inline-block border border-red-500 text-red-600 hover:bg-red-50 text-sm w-full sm:flex-1 text-center rounded-full py-2 px-4 font-medium"
               >
                 Change / Cancel this Appointment
