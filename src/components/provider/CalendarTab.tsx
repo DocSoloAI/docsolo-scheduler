@@ -908,6 +908,72 @@ console.log("🧩 Raw availability_overrides data:", data);
     );
   };
 
+  const handleEventResize = async (info: any) => {
+    // Immediately revert the visual change until confirmed
+    info.revert();
+
+    const status = info.event.extendedProps?.status;
+    const source = info.event.extendedProps?.source;
+    const isTimeOff =
+      status === "time_off" ||
+      source === "time_off" ||
+      info.event.title?.toLowerCase()?.includes("off");
+
+    const oldDuration = Math.round(
+      (info.oldEvent.end - info.oldEvent.start) / 60000
+    );
+    const newDuration = Math.round((info.event.end - info.event.start) / 60000);
+
+    showConfirm(
+      `Change this ${isTimeOff ? "time off" : "appointment"} from ${oldDuration} minutes to ${newDuration} minutes?`,
+      async () => {
+        const start = info.event.start;
+        const end = info.event.end;
+
+        try {
+          if (isTimeOff) {
+            // 🟥 Resize a time-off block
+            const { error: offErr } = await supabase
+              .from("time_off")
+              .update({
+                start_time: fromTZToUTC(start, providerTimezone).toISOString(),
+                end_time: fromTZToUTC(end, providerTimezone).toISOString(),
+              })
+              .eq("id", info.event.id);
+
+            if (offErr) throw offErr;
+
+            toast.success("Time off resized ✅");
+            await loadEvents();
+            return;
+          }
+
+          // 🟦 Resize a patient appointment
+          const { data: updated, error } = await supabase
+            .from("appointments")
+            .update({
+              start_time: fromTZToUTC(start, providerTimezone).toISOString(),
+              end_time: fromTZToUTC(end, providerTimezone).toISOString(),
+            })
+            .eq("id", info.event.id)
+            .select(
+              "id, start_time, patients(first_name,last_name,email), services(name)"
+            )
+            .single();
+
+          if (error) throw error;
+
+          await safeReload();
+          if (updated) await sendDualEmail("update", providerId, updated);
+          toast.success("Appointment resized ✅");
+        } catch (err: any) {
+          console.error("❌ Error resizing event:", err.message);
+          toast.error("Error resizing event: " + err.message);
+        }
+      }
+    );
+  };
+
   const handleSave = async () => {
     if (!selectedDate) return;
     setSaving(true);
@@ -1477,6 +1543,7 @@ if (loading) return <div className="p-4 text-gray-500">Loading calendar…</div>
           dateClick={handleDateClick}
           eventClick={handleEventClick}
           eventDrop={handleEventDrop}
+          eventResize={handleEventResize}
           eventContent={renderEventContent}
           handleWindowResize={false}
           titleFormat={{ year: "numeric", month: "short", day: "numeric" }}
@@ -1858,7 +1925,7 @@ if (loading) return <div className="p-4 text-gray-500">Loading calendar…</div>
                               const dateStr = `${updated.getFullYear()}-${String(updated.getMonth() + 1).padStart(2, '0')}-${String(updated.getDate()).padStart(2, '0')}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`;
                               const localDate = new Date(dateStr);
                               
-                              setSelectedDate(localDate);
+                              setEndDate(localDate);  // ✅ Changed from setSelectedDate
                               markDirty();
                             }}
                           />
