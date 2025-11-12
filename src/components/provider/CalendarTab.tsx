@@ -42,8 +42,6 @@ import { toast } from "react-hot-toast";
 
 import { fromUTCToTZ, fromTZToUTC, formatInTZ } from "@/utils/timezone";
 
-const isDev = import.meta.env.DEV;
-
 // === Email helper ===
 async function sendDualEmail(
   templateType: "confirmation" | "update" | "cancellation" | "reminder",
@@ -574,11 +572,9 @@ async function loadAvailabilityOverrides() {
 
   useEffect(() => {
     if (!providerId || !ctxHours || ctxHours.length === 0) {
-      if (isDev)
       return;
     }
 
-    if (isDev)
     loadEvents();
 
     // 🧠 Debounce helper — prevents overlapping reloads from firing too fast
