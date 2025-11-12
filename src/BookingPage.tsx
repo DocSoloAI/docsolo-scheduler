@@ -101,6 +101,7 @@ export default function BookingPage() {
 
       if (error || !provider) {
         console.error("Provider not found:", error);
+        setProviderOfficeName("ERROR_NOT_FOUND");
         return;
       }
 
@@ -167,7 +168,6 @@ export default function BookingPage() {
         "postgres_changes",
         { event: "*", schema: "public", table: "appointments", filter: `provider_id=eq.${providerId}` },
         async () => {
-          console.log("🔄 Realtime: appointments changed → reloading availability");
           if (selectedDate) {
             const event = new Event("reload-availability");
             window.dispatchEvent(event);
@@ -179,7 +179,6 @@ export default function BookingPage() {
         "postgres_changes",
         { event: "*", schema: "public", table: "time_off", filter: `provider_id=eq.${providerId}` },
         async () => {
-          console.log("🔄 Realtime: time_off changed → reloading availability");
           if (selectedDate) {
             const event = new Event("reload-availability");
             window.dispatchEvent(event);
@@ -292,7 +291,6 @@ export default function BookingPage() {
       if (overErr) {
         console.error("❌ overrides fetch error:", overErr);
       }
-      console.log("🩵 Availability overrides fetched:", overrides);
 
       if (!isActive) return;
 
@@ -351,7 +349,6 @@ export default function BookingPage() {
 
       // ✅ Resort all slots (including new ones from overrides)
       allSlots.sort((a, b) => a.date.getTime() - b.date.getTime());
-      console.log("🩵 Slots after merging overrides:", allSlots.length);
 
       // ✅ Detect full-day off (supports off_date or legacy start/end)
       const hasFullDayOff = (offs || []).some((o: any) => {
@@ -373,7 +370,6 @@ export default function BookingPage() {
       });
 
       if (hasFullDayOff) {
-        console.log("🚫 Full-day OFF detected for", selectedDate.toDateString());
         setAvailableTimes([
           "No appointments available. The office is closed or fully booked for this date.",
         ]);
@@ -580,6 +576,14 @@ export default function BookingPage() {
       setFormError("First name, last name, email, and cell phone are required.");
       return;
     }
+
+    // ✅ NEW: Validate cell phone
+    const cleanedPhone = cellPhone.replace(/\D/g, "");
+    if (!cleanedPhone || cleanedPhone.length !== 10) {
+      setFormError("Please provide a valid 10-digit phone number.");
+      return;
+    }
+
     if (patientType === "new" && !birthday) {
       setFormError("Date of Birth is required for new patients.");
       return;
@@ -778,6 +782,45 @@ export default function BookingPage() {
 
 
   const serviceDescription = services.find(s => s.default_for === patientType)?.description;
+
+  // ✅ NEW: Show error state
+  if (providerOfficeName?.startsWith("ERROR")) {
+    return (
+      <div className="max-w-3xl mx-auto p-8 min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-slate-100">
+        <div className="text-center space-y-4 bg-white p-8 rounded-lg shadow-md">
+          <div className="text-6xl mb-4">❌</div>
+          <h1 className="text-2xl font-bold text-red-600 mb-2">Provider Not Found</h1>
+          <p className="text-gray-600 mb-4">
+            {providerOfficeName === "ERROR_NOT_FOUND"
+              ? "Unable to load booking page. Please check the URL and try again."
+              : "Invalid booking URL. Please check and try again."}
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium transition"
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ✅ NEW: Show loading state while provider data loads
+  if (!providerOfficeName && !bookingComplete) {
+    return (
+      <div className="max-w-3xl mx-auto p-8 min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-slate-100">
+        <div className="text-center space-y-4">
+          <div className="animate-pulse space-y-3">
+            <div className="h-10 bg-gray-200 rounded w-64 mx-auto"></div>
+            <div className="h-4 bg-gray-100 rounded w-48 mx-auto"></div>
+            <div className="h-4 bg-gray-100 rounded w-40 mx-auto"></div>
+          </div>
+          <p className="text-gray-500 text-sm mt-4">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-3xl mx-auto p-8 min-h-screen bg-gradient-to-br from-gray-50 to-slate-100">
