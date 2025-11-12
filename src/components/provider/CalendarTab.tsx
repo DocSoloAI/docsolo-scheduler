@@ -1815,42 +1815,79 @@ if (loading) return <div className="p-4 text-gray-500">Loading calendar…</div>
                   <div className="grid grid-cols-2 gap-4 mt-3">
                     <div>
                       <Label>Start Time</Label>
-                      <Input
-                        type="time"
-                        value={
-                          selectedDate
-                          ? formatInTZ(selectedDate, providerTimezone, "HH:mm")
-
-                            : ""
-                        }
-                        onChange={(e) => {
-                          const [hours, minutes] = e.target.value.split(":").map(Number);
+                      <Select
+                        value={selectedDate ? formatInTZ(selectedDate, providerTimezone, "HH:mm") : ""}
+                        onValueChange={(value) => {
+                          const [hours, minutes] = value.split(":").map(Number);
                           const updated = selectedDate ? new Date(selectedDate) : new Date();
                           updated.setHours(hours, minutes, 0, 0);
                           setSelectedDate(updated);
                           markDirty();
                         }}
-                      />
-                    </div>
-                    <div>
-                      <Label>End Time</Label>
-                      <Input
-                        type="time"
-                        value={
-                          endDate
-                          ? formatInTZ(endDate, providerTimezone, "HH:mm")
-                            : ""
-                        }
-                        onChange={(e) => {
-                          const [hours, minutes] = e.target.value.split(":").map(Number);
-                          const updated = endDate ? new Date(endDate) : new Date();
-                          updated.setHours(hours, minutes, 0, 0);
-                          setEndDate(updated);
-                          setIsDirty(true);
-                        }}
-                      />
+                      >
+                        <SelectTrigger className="font-sans tabular-nums font-medium">
+                          <SelectValue placeholder="Select time..." />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-[300px]">
+                          {Array.from({ length: 288 }, (_, i) => {
+                            const totalMinutes = i * 5;
+                            const minutes = totalMinutes % 60;
+                            // Skip :05, :25, :35, :50, :55
+                            if (minutes === 5 || minutes === 25 || minutes === 35 || minutes === 50 || minutes === 55) return null;
+                            
+                            const hours = Math.floor(totalMinutes / 60);
+                            const time24 = `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+                            const hours12 = hours % 12 || 12;
+                            const ampm = hours >= 12 ? "PM" : "AM";
+                            const timeDisplay = `${hours12}:${String(minutes).padStart(2, "0")} ${ampm}`;
+                            
+                            return (
+                              <SelectItem key={time24} value={time24} className="font-sans tabular-nums">
+                                {timeDisplay}
+                              </SelectItem>
+                            );
+                          })}
+                        </SelectContent>
+                      </Select>
                     </div>
 
+                    <div>
+                      <Label>End Time</Label>
+                      <Select
+                        value={endDate ? formatInTZ(endDate, providerTimezone, "HH:mm") : ""}
+                        onValueChange={(value) => {
+                          const [hours, minutes] = value.split(":").map(Number);
+                          const updated = selectedDate ? new Date(selectedDate) : new Date();
+                          updated.setHours(hours, minutes, 0, 0);
+                          setEndDate(updated);
+                          markDirty();
+                        }}
+                      >
+                        <SelectTrigger className="font-sans tabular-nums font-medium">
+                          <SelectValue placeholder="Select time..." />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-[300px]">
+                          {Array.from({ length: 288 }, (_, i) => {
+                            const totalMinutes = i * 5;
+                            const minutes = totalMinutes % 60;
+                            // Skip :05, :25, :35, :50, :55
+                            if (minutes === 5 || minutes === 25 || minutes === 35 || minutes === 50 || minutes === 55) return null;
+                            
+                            const hours = Math.floor(totalMinutes / 60);
+                            const time24 = `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+                            const hours12 = hours % 12 || 12;
+                            const ampm = hours >= 12 ? "PM" : "AM";
+                            const timeDisplay = `${hours12}:${String(minutes).padStart(2, "0")} ${ampm}`;
+                            
+                            return (
+                              <SelectItem key={time24} value={time24} className="font-sans tabular-nums">
+                                {timeDisplay}
+                              </SelectItem>
+                            );
+                          })}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                   <div>
                     <Label>Note (optional)</Label>
@@ -1887,48 +1924,76 @@ if (loading) return <div className="p-4 text-gray-500">Loading calendar…</div>
                       <div className="grid grid-cols-2 gap-4 mt-3">
                         <div>
                           <Label>Start Time</Label>
-                          <Input
-                            type="time"
-                            value={
-                              selectedDate
-                                ? formatInTZ(selectedDate, providerTimezone, "HH:mm")
-                                : ""
-                            }
-                            onChange={(e) => {
-                              const [hours, minutes] = e.target.value.split(":").map(Number);
+                          <Select
+                            value={selectedDate ? formatInTZ(selectedDate, providerTimezone, "HH:mm") : ""}
+                            onValueChange={(value) => {
+                              const [hours, minutes] = value.split(":").map(Number);
                               const updated = selectedDate ? new Date(selectedDate) : new Date();
-                              
-                              // Create a date string in provider's timezone, then parse it
-                              const dateStr = `${updated.getFullYear()}-${String(updated.getMonth() + 1).padStart(2, '0')}-${String(updated.getDate()).padStart(2, '0')}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`;
-                              const localDate = new Date(dateStr);
-                              
-                              setSelectedDate(localDate);
+                              updated.setHours(hours, minutes, 0, 0);
+                              setSelectedDate(updated);
                               markDirty();
                             }}
-                          />
+                          >
+                            <SelectTrigger className="font-sans tabular-nums font-medium">
+                              <SelectValue placeholder="Select time..." />
+                            </SelectTrigger>
+                            <SelectContent className="max-h-[300px]">
+                              {Array.from({ length: 288 }, (_, i) => {
+                                const totalMinutes = i * 5;
+                                const minutes = totalMinutes % 60;
+                                // Skip :05, :25, :35, :55
+                                if (minutes === 5 || minutes === 25 || minutes === 35 || minutes === 50 || minutes === 55) return null;                                
+                                const hours = Math.floor(totalMinutes / 60);
+                                const time24 = `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+                                const hours12 = hours % 12 || 12;
+                                const ampm = hours >= 12 ? "PM" : "AM";
+                                const timeDisplay = `${hours12}:${String(minutes).padStart(2, "0")} ${ampm}`;
+                                
+                                return (
+                                  <SelectItem key={time24} value={time24} className="font-sans tabular-nums">
+                                    {timeDisplay}
+                                  </SelectItem>
+                                );
+                              })}
+                            </SelectContent>
+                          </Select>
                         </div>
 
                         <div>
                           <Label>End Time</Label>
-                          <Input
-                            type="time"
-                            value={
-                              endDate
-                                ? formatInTZ(endDate, providerTimezone, "HH:mm")
-                                : ""
-                            }
-                            onChange={(e) => {
-                              const [hours, minutes] = e.target.value.split(":").map(Number);
+                          <Select
+                            value={endDate ? formatInTZ(endDate, providerTimezone, "HH:mm") : ""}
+                            onValueChange={(value) => {
+                              const [hours, minutes] = value.split(":").map(Number);
                               const updated = selectedDate ? new Date(selectedDate) : new Date();
-                              
-                              // Create a date string in provider's timezone, then parse it
-                              const dateStr = `${updated.getFullYear()}-${String(updated.getMonth() + 1).padStart(2, '0')}-${String(updated.getDate()).padStart(2, '0')}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`;
-                              const localDate = new Date(dateStr);
-                              
-                              setEndDate(localDate);  // ✅ Changed from setSelectedDate
+                              updated.setHours(hours, minutes, 0, 0);
+                              setEndDate(updated);
                               markDirty();
                             }}
-                          />
+                          >
+                            <SelectTrigger className="font-sans tabular-nums font-medium">
+                              <SelectValue placeholder="Select time..." />
+                            </SelectTrigger>
+                            <SelectContent className="max-h-[300px]">
+                              {Array.from({ length: 288 }, (_, i) => {
+                                const totalMinutes = i * 5;
+                                const minutes = totalMinutes % 60;
+                                // Skip :05, :25, :35, :55
+                                if (minutes === 5 || minutes === 25 || minutes === 35 || minutes === 50 || minutes === 55) return null;                                
+                                const hours = Math.floor(totalMinutes / 60);
+                                const time24 = `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+                                const hours12 = hours % 12 || 12;
+                                const ampm = hours >= 12 ? "PM" : "AM";
+                                const timeDisplay = `${hours12}:${String(minutes).padStart(2, "0")} ${ampm}`;
+                                
+                                return (
+                                  <SelectItem key={time24} value={time24} className="font-sans tabular-nums">
+                                    {timeDisplay}
+                                  </SelectItem>
+                                );
+                              })}
+                            </SelectContent>
+                          </Select>
                         </div>
                       </div>
                     )}
