@@ -350,35 +350,62 @@ async function loadAvailabilityOverrides() {
     if (isDev) console.log("🩶 No active overrides found for this provider.");
     return [];
   }
+console.log("🧩 Raw availability_overrides data:", data);
 
-  const mapped = data.map((r) => {
-    const start = new Date(r.start_time);
-    const end = new Date(r.end_time);
+  const mapped = (data || [])
+    .map((r) => {
+      // 🧩 Safe parser for Postgres timestamptz and nulls
+      const safeDate = (ts?: string | null) => {
+        if (!ts || typeof ts !== "string") return null;
+        const cleaned = ts.trim();
+        if (cleaned === "" || cleaned.toLowerCase() === "null") return null;
 
-    return {
-      id: `avail-${r.id}`,
-      title: "", // no text
-      start,
-      end,
-      allDay: false,
-      display: "auto", // ✅ keep clickability
-      overlap: true,
-      editable: false,
-      backgroundColor: "#E0F7FA", // soft teal
-      borderColor: "transparent",
-      textColor: "transparent",
-      classNames: ["availability-block"], // ✅ add this line
-      extendedProps: {
-        status: "availability_override",
-        source: "availability_override",
-      },
-    };
-  });
+        // Normalize Postgres output: "YYYY-MM-DD hh:mm:ss" → ISO
+        const normalized =
+          cleaned.includes("T") ? cleaned : cleaned.replace(" ", "T");
 
+        // Append Z if no timezone info present
+        const hasTZ = /[zZ]|[+\-]\d\d:?(\d\d)?$/.test(normalized);
+        const iso = hasTZ ? normalized : normalized + "Z";
+
+        const d = new Date(iso);
+        if (isNaN(d.getTime())) {
+          console.warn("⚠️ Skipping invalid timestamp:", ts);
+          return null;
+        }
+        return d;
+      };
+
+
+      const start = safeDate(r.start_time);
+      const end = safeDate(r.end_time);
+      if (!start || !end) return null; // ✅ skip invalid or null rows
+
+      return {
+        id: `avail-${r.id}`,
+        title: "",
+        start,
+        end,
+        allDay: false,
+        display: "auto",
+        overlap: true,
+        editable: false,
+        backgroundColor: "#E0F7FA",
+        borderColor: "transparent",
+        textColor: "transparent",
+        classNames: ["availability-block"],
+        extendedProps: {
+          status: "availability_override",
+          source: "availability_override",
+        },
+      };
+    })
+    .filter(Boolean); // ✅ strip out nulls so loadEvents never fails
 
   if (isDev) console.log("🩵 Overrides mapped to calendar events:", mapped);
 
   return mapped;
+
 }
 
 
@@ -450,47 +477,72 @@ async function loadAvailabilityOverrides() {
 
         // ✅ Normalize and include off_date-based records
         const mappedOffs =
-          (offs || []).map((o) => {
-            const isHoliday = o.reason?.startsWith("holiday:");
-            let start: Date;
-            let end: Date;
+          (offs || [])
+            .map((o) => {
+              try {
+                const isHoliday = o.reason?.startsWith("holiday:");
+                let start: Date | null = null;
+                let end: Date | null = null;
 
-            if (o.off_date && o.all_day) {
-              // 🟩 Full-day or repeating full-day (including meta_repeat)
-              const [year, month, day] = o.off_date.split("-").map(Number);
-              start = new Date(year, month - 1, day, 0, 0, 0, 0);
-              end = new Date(year, month - 1, day, 23, 59, 59, 999);
-            } else if (o.start_time && o.end_time) {
-              // 🟦 Partial-day - treat DB timestamp as UTC, convert to local
-              const startUTC = new Date(o.start_time + 'Z'); // Add Z to mark as UTC
-              const endUTC = new Date(o.end_time + 'Z');
-              start = fromUTCToTZ(startUTC.toISOString(), providerTimezone);
-              end = fromUTCToTZ(endUTC.toISOString(), providerTimezone);            } else if (o.meta_repeat && o.meta_repeat.start_date) {
-              // 🧩 Handle repeating full-day with meta_repeat but no off_date
-              const base = fromUTCToTZ(o.meta_repeat.start_date, providerTimezone); // ✅ CHANGED
-              start = new Date(base);
-              end = new Date(base.getFullYear(), base.getMonth(), base.getDate(), 23, 59, 59, 999);
-            } else {
-              return null; // skip invalid
-            }
+                // 🟩 Full-day off (off_date + all_day)
+                if (o.off_date && o.all_day) {
+                  const dateStr = o.off_date.trim();
+                  if (dateStr) {
+                    const [year, month, day] = dateStr.split("-").map(Number);
+                    start = new Date(year, month - 1, day, 0, 0, 0, 0);
+                    end = new Date(year, month - 1, day, 23, 59, 59, 999);
+                  }
+                }
 
-                        return {
-              id: o.id,
-              title: isHoliday ? "Office Closed" : o.reason || "OFF",
-              start,
-              end,
-              allDay: false, // ✅ force into hourly grid
-              display: "auto",
-              backgroundColor: isHoliday ? "#fde68a" : "#fecaca", // 🟨 yellowish for holidays
-              borderColor: isHoliday ? "#facc15" : "#f87171",
-              textColor: isHoliday ? "#78350f" : "#7f1d1d",
-              extendedProps: {
-                source: "time_off",
-                status: "time_off",
-                meta_repeat: o.meta_repeat || null,
-              },
-            };
-          }) ?? [];
+                // 🟦 Partial-day off (start_time + end_time)
+                if (!start && o.start_time && o.end_time) {
+                  const startStr = String(o.start_time).trim();
+                  const endStr = String(o.end_time).trim();
+                  if (startStr && endStr) {
+                    const startUTC = new Date(startStr.includes("T") ? startStr : startStr.replace(" ", "T") + "Z");
+                    const endUTC = new Date(endStr.includes("T") ? endStr : endStr.replace(" ", "T") + "Z");
+                    if (!isNaN(startUTC.getTime()) && !isNaN(endUTC.getTime())) {
+                      start = fromUTCToTZ(startUTC.toISOString(), providerTimezone);
+                      end = fromUTCToTZ(endUTC.toISOString(), providerTimezone);
+                    }
+                  }
+                }
+
+                // 🧩 Repeating meta_repeat with start_date
+                if (!start && o.meta_repeat?.start_date) {
+                  const base = fromUTCToTZ(o.meta_repeat.start_date, providerTimezone);
+                  start = new Date(base);
+                  end = new Date(base.getFullYear(), base.getMonth(), base.getDate(), 23, 59, 59, 999);
+                }
+
+                if (!start || !end || isNaN(start.getTime()) || isNaN(end.getTime())) {
+                  console.warn("⏭️ Skipping bad time_off record:", o);
+                  return null;
+                }
+
+                return {
+                  id: o.id,
+                  title: isHoliday ? "Office Closed" : o.reason || "OFF",
+                  start,
+                  end,
+                  allDay: o.all_day === true,
+                  display: "auto",
+                  backgroundColor: isHoliday ? "#fde68a" : "#fecaca",
+                  borderColor: isHoliday ? "#facc15" : "#f87171",
+                  textColor: isHoliday ? "#78350f" : "#7f1d1d",
+                  extendedProps: {
+                    source: "time_off",
+                    status: "time_off",
+                    meta_repeat: o.meta_repeat || null,
+                  },
+                };
+              } catch (err) {
+                console.error("⚠️ Error parsing time_off record:", o, err);
+                return null;
+              }
+            })
+            .filter(Boolean);
+
 
 
 
@@ -1053,7 +1105,11 @@ async function loadAvailabilityOverrides() {
           provider_id: providerId,
           reason: timeOffReason || "Time Off",
           all_day: isFullDay,
+          off_date: isFullDay ? selectedDate.toISOString().slice(0,10) : null,
+          start_time: isFullDay ? null : fromTZToUTC(start, providerTimezone).toISOString().slice(0,19).replace("T"," "),
+          end_time: isFullDay ? null : fromTZToUTC(end, providerTimezone).toISOString().slice(0,19).replace("T"," "),
         };
+
 
         if (isFullDay) {
           insertData.off_date = selectedDate.toISOString().slice(0, 10);

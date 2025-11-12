@@ -282,6 +282,18 @@ export default function BookingPage() {
       }
       if (offErr) return; // 🚫 stop if the query failed
 
+      // --- Fetch availability overrides ---
+      const { data: overrides, error: overErr } = await supabase
+        .from("availability_overrides")
+        .select("start_time, end_time, is_active")
+        .eq("provider_id", providerId)
+        .eq("is_active", true);
+
+      if (overErr) {
+        console.error("❌ overrides fetch error:", overErr);
+      }
+      console.log("🩵 Availability overrides fetched:", overrides);
+
       console.log("🟩 Time-off rows fetched:", offs);
       if (!isActive) return;
 
@@ -319,17 +331,55 @@ export default function BookingPage() {
         return { start, end, all_day: !!o.all_day };
       });
 
-      // ✅ Combine appointments + time_off
-      const bookedSlots = [
-        ...(appts || [])
-          .filter((a) => !rescheduleId || a.id !== rescheduleId)
-          .map((a) => ({
-            start: new Date(a.start_time),
-            end: new Date(a.end_time),
-            all_day: false,
-          })),
-        ...mappedOffs,
-      ];
+      // ✅ Normalize overrides to local Date objects
+      const mappedOverrides = (overrides || [])
+        .map((o) => {
+          if (!o.start_time || !o.end_time) return null;
+          try {
+            const safeStart = o.start_time.includes("T")
+              ? o.start_time
+              : o.start_time.replace(" ", "T") + "Z";
+            const safeEnd = o.end_time.includes("T")
+              ? o.end_time
+              : o.end_time.replace(" ", "T") + "Z";
+
+            const startUTC = new Date(safeStart);
+            const endUTC = new Date(safeEnd);
+            if (isNaN(startUTC.getTime()) || isNaN(endUTC.getTime())) return null;
+
+            const start = fromUTCToTZ(startUTC.toISOString(), providerTimezone);
+            const end = fromUTCToTZ(endUTC.toISOString(), providerTimezone);
+
+            return { start, end, all_day: false };
+          } catch (err) {
+            console.warn("Skipping bad override:", o, err);
+            return null;
+          }
+        })
+        .filter(Boolean);
+
+
+        // ✅ Combine appointments + time_off
+        // 🩵 Apply overrides last so they "free up" time previously blocked
+        const bookedSlots = [
+          ...(appts || [])
+            .filter((a) => !rescheduleId || a.id !== rescheduleId)
+            .map((a) => ({
+              start: new Date(a.start_time),
+              end: new Date(a.end_time),
+              all_day: false,
+            })),
+          ...mappedOffs,
+        ].filter((slot) => {
+          if (!slot || !slot.start || !slot.end) return false;
+
+          // Remove any slot fully covered by an override (available again)
+          return !mappedOverrides.some((o) => {
+            if (!o?.start || !o?.end || !slot?.start || !slot?.end) return false;
+            return o.start <= slot.start! && o.end >= slot.end!;
+          });
+        });
+
 
       // ✅ Filter out overlapping or all-day blocks
       const freeSlots = allSlots
