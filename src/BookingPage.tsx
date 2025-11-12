@@ -584,9 +584,18 @@ export default function BookingPage() {
       return;
     }
 
-    if (patientType === "new" && !birthday) {
-      setFormError("Date of Birth is required for new patients.");
-      return;
+    if (patientType === "new") {
+      if (!birthday || birthday.length !== 10) {
+        setFormError("Please provide a valid date of birth (MM/DD/YYYY).");
+        return;
+      }
+      
+      const [mm, dd, yyyy] = birthday.split("/").map((n) => parseInt(n));
+      const isValid = mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31 && yyyy > 1900 && yyyy <= new Date().getFullYear();
+      if (!isValid) {
+        setFormError("Please provide a valid date of birth.");
+        return;
+      }
     }
 
     try {
@@ -646,11 +655,14 @@ export default function BookingPage() {
       if (conflictErr) throw conflictErr;
 
       if (conflicts && conflicts.length > 0) {
-        toast.error(
-          "That time slot is no longer available. Refreshing available times..."
-        );
+        toast.error("That time slot is no longer available. Refreshing...");
         setSelectedTime(null);
         setShowConfirmModal(false);
+        if (selectedDate) {
+          setTimeout(() => {
+            setSelectedDate(new Date(selectedDate));
+          }, 100);
+        }
         return;
       }
       
@@ -1016,6 +1028,10 @@ export default function BookingPage() {
                             )}
                             :
                           </p>
+
+                          {availableTimes.length === 0 && (
+                            <div className="text-center text-gray-500">Loading available times...</div>
+                          )}
 
                           {/* 🟢 Show message if array contains only a note */}
                           {availableTimes.length === 1 &&
