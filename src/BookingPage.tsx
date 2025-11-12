@@ -360,8 +360,7 @@ export default function BookingPage() {
 
 
         // ✅ Combine appointments + time_off
-        // 🩵 Apply overrides last so they "free up" time previously blocked
-        const bookedSlots = [
+        let bookedSlots = [
           ...(appts || [])
             .filter((a) => !rescheduleId || a.id !== rescheduleId)
             .map((a) => ({
@@ -370,15 +369,26 @@ export default function BookingPage() {
               all_day: false,
             })),
           ...mappedOffs,
-        ].filter((slot) => {
-          if (!slot || !slot.start || !slot.end) return false;
+        ];
 
-          // Remove any slot fully covered by an override (available again)
-          return !mappedOverrides.some((o) => {
-            if (!o?.start || !o?.end || !slot?.start || !slot?.end) return false;
-            return o.start <= slot.start! && o.end >= slot.end!;
+        // 🩵 Apply overrides last so they "free up" blocked slots
+        if (mappedOverrides.length > 0) {
+          bookedSlots = bookedSlots.filter((slot) => {
+            if (!slot?.start || !slot?.end) return false;
+
+            // ✅ Keep this slot only if it does NOT fall fully inside an override window
+            const isInsideOverride = mappedOverrides.some((o) => {
+              if (!o?.start || !o?.end) return false;
+              return (
+                slot.start! >= o.start! &&
+                slot.end! <= o.end!
+              );
+            });
+
+            // ❌ Skip (remove) time_off/appointments that are overridden (freed up)
+            return !isInsideOverride;
           });
-        });
+        }
 
 
       // ✅ Filter out overlapping or all-day blocks
