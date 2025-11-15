@@ -22,14 +22,27 @@ interface Patient {
   id?: string;
   first_name: string;
   last_name: string;
-  email: string;
-  cell_phone?: string;
   full_name?: string;
+
+  // Email fields
+  email: string;
+  other_emails?: string[];   // NEW
+  all_emails?: string[];     // NEW (UI helper only)
+
+  // Phones
+  cell_phone?: string;
+  home_phone?: string;
+
+  // Visit counts
   visit_count?: number;
   last_appointment?: string | null;
   manual_visit_count?: number | null;
+
+  // Reminder flags
   allow_text?: boolean;
+  allow_email?: boolean;     // NEW
 }
+
 
 export default function PatientsTab({ providerId }: PatientsTabProps) {
   const [patients, setPatients] = useState<Patient[]>([]);
@@ -90,32 +103,62 @@ export default function PatientsTab({ providerId }: PatientsTabProps) {
   };
 
   const openEditModal = async (p: Patient) => {
-    setEditing(p);
+    // 🔄 Reload full patient record (includes other_emails)
+    const { data: fullPatient, error: patientErr } = await supabase
+      .from("patients")
+      .select(
+        "id, first_name, last_name, full_name, email, other_emails, cell_phone, home_phone, manual_visit_count, allow_text, allow_email"
+      )
+      .eq("id", p.id)
+      .single();
 
-    // ✅ Fallback: split full_name if first/last are missing
-    let first = p.first_name ?? "";
-    let last = p.last_name ?? "";
-    if ((!first || !last) && p.full_name) {
-      const parts = p.full_name.trim().split(" ");
+    if (patientErr) {
+      console.error("❌ Error loading full patient details:", patientErr.message);
+      toast.error("Could not load patient details.");
+      return;
+    }
+
+    setEditing(fullPatient);
+
+    // 🧠 Determine first and last name reliably
+    let first = fullPatient.first_name || "";
+    let last = fullPatient.last_name || "";
+
+    if ((!first || !last) && fullPatient.full_name) {
+      const parts = fullPatient.full_name.trim().split(" ");
       first = parts[0] ?? "";
       last = parts.slice(1).join(" ") ?? "";
     }
 
+    // 🧠 Prepare email fields
+    const primaryEmail = fullPatient.email ?? "";
+    const otherEmails = fullPatient.other_emails ?? [];
+
+    // Put primary email first, then secondary ones
+    const combinedEmails = [primaryEmail, ...otherEmails];
+
+    // Initialize form with expanded email fields
     setForm({
       first_name: first,
       last_name: last,
-      email: p.email ?? "",
-      cell_phone: p.cell_phone ?? "",
+      email: primaryEmail,
+      cell_phone: fullPatient.cell_phone ?? "",
+      manual_visit_count: fullPatient.manual_visit_count ?? null,
+      allow_text: fullPatient.allow_text ?? true,
+      allow_email: fullPatient.allow_email ?? true,
+      other_emails: otherEmails, // NEW FIELD in form state
+      all_emails: combinedEmails // UI helper
     });
 
-    // 🗓️ Load appointments for this patient
+    // 🗓️ Load appointments exactly as before
     setLoadingAppointments(true);
+
     const { data, error } = await supabase
       .from("appointments")
       .select("id, start_time, end_time, status")
       .eq("patient_id", p.id)
       .eq("provider_id", providerId)
-      .in("status", ["booked", "completed"]) // ✅ only actual visits
+      .in("status", ["booked", "completed"])
       .order("start_time", { ascending: false });
 
     if (error) {
@@ -128,6 +171,7 @@ export default function PatientsTab({ providerId }: PatientsTabProps) {
     setLoadingAppointments(false);
     setModalOpen(true);
   };
+
 
   // 💾 Confirm Save
   const handleSaveClick = () => {
@@ -151,12 +195,26 @@ const savePatient = async () => {
         .update({
           first_name: form.first_name.trim(),
           last_name: form.last_name.trim(),
-          ...(form.email ? { email: form.email.trim() } : {}),
+
+          // Primary email always stored here
+          email: form.email.trim(),
+
+          // Save secondary emails
+          other_emails: form.other_emails ?? [],
+
+          // Phones
           cell_phone: form.cell_phone?.trim() || null,
+          home_phone: form.home_phone?.trim() || null,
+
+          // Visit count override
           manual_visit_count: form.manual_visit_count ?? null,
-          allow_text: form.allow_text ?? true, // ✅ new field
+
+          // Reminder flags
+          allow_text: form.allow_text ?? true,
+          allow_email: form.allow_email ?? true,
         })
         .eq("id", editing.id);
+
 
       if (updateError) throw updateError;
       console.log("✅ Patient updated successfully:", editing.id);
@@ -363,6 +421,55 @@ const savePatient = async () => {
                   setForm({ ...form, email: e.target.value })
                 }
               />
+            </div>
+
+            {/* Secondary Emails */}
+            {form.other_emails && form.other_emails.length > 0 && (
+              <div className="mt-3">
+                <Label>Other Emails</Label>
+                <div className="space-y-2 mt-1">
+                  {form.other_emails.map((em, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <Input
+                        type="email"
+                        value={em}
+                        onChange={(e) => {
+                          const updated = [...form.other_emails!];
+                          updated[idx] = e.target.value;
+                          setForm({ ...form, other_emails: updated });
+                        }}
+                      />
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => {
+                          const updated = form.other_emails!.filter(
+                            (_, i) => i !== idx
+                          );
+                          setForm({ ...form, other_emails: updated });
+                        }}
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Add Another Email */}
+            <div className="mt-3">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const updated = [...(form.other_emails || [])];
+                  updated.push("");
+                  setForm({ ...form, other_emails: updated });
+                }}
+              >
+                + Add Another Email
+              </Button>
             </div>
 
             <div>
