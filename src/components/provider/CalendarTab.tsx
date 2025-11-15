@@ -523,9 +523,6 @@ async function loadAvailabilityOverrides() {
             })
             .filter(Boolean);
 
-
-
-
         // ---------- Merge & Render ----------
         const overrides = await loadAvailabilityOverrides();
 
@@ -616,12 +613,11 @@ async function loadAvailabilityOverrides() {
       .subscribe();
 
     // 🧹 Cleanup on unmount
-    return () => {
-      supabase.removeChannel(channel);
-      if (reloadTimer) clearTimeout(reloadTimer);
-    };
-  }, [providerId, ctxHours]);
-
+        return () => {
+          supabase.removeChannel(channel);
+          if (reloadTimer) clearTimeout(reloadTimer);
+        };
+      }, [providerId, ctxHours]);
 
 
   const resetForm = () => {

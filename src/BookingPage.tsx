@@ -1547,7 +1547,8 @@ export default function BookingPage() {
                           if (confirming) return;
                           setConfirming(true);
                           await handleConfirm();
-                          setConfirming(false);
+                          // Do NOT setConfirming(false)
+                          // Once confirmed, the success view replaces this button anyway.
                         }}
                       >
                         {confirming ? "Confirming..." : "Confirm Appointment"}
