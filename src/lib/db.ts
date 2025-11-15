@@ -20,45 +20,148 @@ interface AppointmentInput {
   patient_note?: string | null; // ✅ allow null
 }
 
+function normalizeEmail(email: string | null): string | null {
+  if (!email) return null;
+  return email.trim().toLowerCase();
+}
+
+function normalizePhone(phone: string | null | undefined): string | null {
+  if (!phone) return null;
+  const digits = phone.replace(/\D/g, "");
+  return digits.length > 0 ? digits : null;
+}
+
+
 export async function upsertPatientAndCreateAppointment(
   patient: PatientInput,
   appointment: AppointmentInput
 ) {
-  // 1. Try to find existing patient by email or cell_phone
-  let { data: existingPatients, error: lookupError } = await supabase
-    .from("patients")
-    .select("id, allow_text")
-    .eq("provider_id", patient.provider_id)
-    .or(`email.eq.${patient.email},cell_phone.eq.${patient.cell_phone ?? ""}`)
-    .limit(1);
+  // -------------------------------------
+  // NORMALIZATION
+  // -------------------------------------
+  const incomingEmail = normalizeEmail(patient.email);
+  const incomingPhone = normalizePhone(patient.cell_phone);
+  const incomingFirst = patient.first_name.trim().toLowerCase();
+  const incomingLast = patient.last_name.trim().toLowerCase();
 
-  if (lookupError) throw lookupError;
+  let existingPatient: any | null = null;
+
+  // -----------------------------
+  // 1. MASTER MATCH: Phone number
+  // -----------------------------
+  if (incomingPhone) {
+    const { data, error } = await supabase
+      .from("patients")
+      .select("id, email, other_emails, cell_phone, first_name, last_name, allow_text")
+      .eq("provider_id", patient.provider_id)
+      // normalize phone for both sides
+      .or(`regexp_replace(cell_phone, '[^0-9]', '', 'g').eq.${incomingPhone}`)
+      .limit(1);
+
+    if (error) throw error;
+    if (data && data.length > 0) {
+      existingPatient = data[0];
+    }
+  }
+
+  // -------------------------------------------------
+  // 2. PRIMARY OR SECONDARY EMAIL MATCH (if no phone)
+  // -------------------------------------------------
+  if (!existingPatient && incomingEmail) {
+    const { data, error } = await supabase
+      .from("patients")
+      .select("id, email, other_emails, cell_phone, first_name, last_name, allow_text")
+      .eq("provider_id", patient.provider_id)
+      .or(
+        `lower(email).eq.${incomingEmail},other_emails.cs.{${incomingEmail}}`
+      )
+      .limit(1);
+
+    if (error) throw error;
+    if (data && data.length > 0) {
+      existingPatient = data[0];
+    }
+  }
+
+  // ------------------------------------------------------
+  // 3. FALLBACK MATCH: full name + email (case-insensitive)
+  // ------------------------------------------------------
+  if (!existingPatient && incomingEmail) {
+    const { data, error } = await supabase
+      .from("patients")
+      .select("id, email, other_emails, cell_phone, first_name, last_name, allow_text")
+      .eq("provider_id", patient.provider_id)
+      .eq("lower(first_name)", incomingFirst)
+      .eq("lower(last_name)", incomingLast)
+      .eq("lower(email)", incomingEmail)
+      .limit(1);
+
+    if (error) throw error;
+    if (data && data.length > 0) {
+      existingPatient = data[0];
+    }
+  }
 
   let patientId: string;
 
-  if (existingPatients && existingPatients.length > 0) {
-    // 2. Found existing patient → update last_seen_at
-    patientId = existingPatients[0].id;
+  // ---------------------------------------------------
+  // UPDATE EXISTING PATIENT (merge emails, update timestamp)
+  // ---------------------------------------------------
+  if (existingPatient) {
+    patientId = existingPatient.id;
 
-    const { error: updateError } = await supabase
-      .from("patients")
-      .update({ last_seen_at: new Date().toISOString() })
-      .eq("id", patientId);
+    const currentPrimary = normalizeEmail(existingPatient.email);
+    const currentOthers: string[] = existingPatient.other_emails ?? [];
 
-    if (updateError) throw updateError;
-  } else {
-    // 3. Insert new patient
+    let updatedOthers = [...currentOthers];
+
+    // If the new email is different, promote new email to primary
+    if (incomingEmail && incomingEmail !== currentPrimary) {
+      // Add old primary to other_emails if missing
+      if (currentPrimary && !updatedOthers.includes(currentPrimary)) {
+        updatedOthers.push(currentPrimary);
+      }
+
+      // Add incomingEmail to other_emails if not present
+      if (!updatedOthers.includes(incomingEmail)) {
+        updatedOthers.push(incomingEmail);
+      }
+
+      const { error } = await supabase
+        .from("patients")
+        .update({
+          email: incomingEmail,
+          other_emails: updatedOthers,
+          last_seen_at: new Date().toISOString(),
+        })
+        .eq("id", patientId);
+
+      if (error) throw error;
+    } else {
+      // Email didn't change, just update timestamp
+      const { error } = await supabase
+        .from("patients")
+        .update({ last_seen_at: new Date().toISOString() })
+        .eq("id", patientId);
+
+      if (error) throw error;
+    }
+  }
+
+  // ----------------------------------------
+  // INSERT NEW PATIENT (no match was found)
+  // ----------------------------------------
+  else {
     const { data: newPatient, error: insertError } = await supabase
       .from("patients")
       .insert({
         first_name: patient.first_name,
         last_name: patient.last_name,
-        email: patient.email,
-        cell_phone: patient.cell_phone,
+        email: incomingEmail,
+        other_emails: [], // starts empty
+        cell_phone: incomingPhone,
         provider_id: patient.provider_id,
         last_seen_at: new Date().toISOString(),
-
-        // ✅ New consent flags (will default true if not provided)
         allow_email: patient.allow_email ?? true,
         allow_text: patient.allow_text ?? true,
       })
@@ -69,7 +172,9 @@ export async function upsertPatientAndCreateAppointment(
     patientId = newPatient.id;
   }
 
+  // --------------------------------------------------------
   // 4. Create appointment linked to patient
+  // --------------------------------------------------------
   const { data: newAppt, error: apptError } = await supabase
     .from("appointments")
     .insert({
@@ -86,8 +191,9 @@ export async function upsertPatientAndCreateAppointment(
 
   if (apptError) throw apptError;
 
-  return { 
-    ...newAppt, 
-    existingPatientAllowText: existingPatients?.[0]?.allow_text ?? null 
+  return {
+    ...newAppt,
+    existingPatientAllowText: existingPatient?.allow_text ?? null,
   };
 }
+

@@ -1535,7 +1535,6 @@ export default function BookingPage() {
                       >
                         Go Back & Fix
                       </Button>
-
                       <Button
                         disabled={confirming}
                         className={`flex-1 font-semibold rounded-lg transition-colors ${
@@ -1544,11 +1543,11 @@ export default function BookingPage() {
                             : "bg-blue-600 text-white hover:bg-green-600"
                         }`}
                         onClick={async () => {
-                          if (confirming) return;
-                          setConfirming(true);
-                          await handleConfirm();
-                          // Do NOT setConfirming(false)
-                          // Once confirmed, the success view replaces this button anyway.
+                          if (confirming) return;      // ⛔ absolute blocker
+                          setConfirming(true);         // 🔐 freeze button
+                          await handleConfirm();       // 📨 send emails + create appt
+                          // DO NOT reset confirming here.
+                          // The modal flips to success view anyway.
                         }}
                       >
                         {confirming ? "Confirming..." : "Confirm Appointment"}
