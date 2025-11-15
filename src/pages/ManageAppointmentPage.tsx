@@ -33,6 +33,7 @@ export default function ManageAppointmentPage() {
   const [loading, setLoading] = useState(true);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [cancelled, setCancelled] = useState(false);
+  const [canceling, setCanceling] = useState(false);
 
   useEffect(() => {
     if (!appointmentId) return;
@@ -319,13 +320,23 @@ export default function ManageAppointmentPage() {
             </Button>
             <Button
               variant="destructive"
+              disabled={canceling}
               onClick={async () => {
+                if (canceling) return;
+                setCanceling(true);
+
                 await handleCancel();
+
                 setConfirmOpen(false);
+                // Do NOT reset canceling. Modal closes → button disappears.
               }}
-              className="rounded-lg"
+              className={`rounded-lg ${
+                canceling
+                  ? "opacity-50 cursor-not-allowed"
+                  : ""
+              }`}
             >
-              Yes, Cancel It
+              {canceling ? "Canceling..." : "Yes, Cancel It"}
             </Button>
           </div>
         </DialogContent>
