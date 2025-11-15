@@ -51,18 +51,24 @@ export async function upsertPatientAndCreateAppointment(
     const { data, error } = await supabase
       .from("patients")
       .select("id, email, other_emails, cell_phone, first_name, last_name, allow_text")
-      .eq("provider_id", patient.provider_id)
-      .filter(
-        `regexp_replace(cell_phone, '[^0-9]', '', 'g')`,
-        "eq",
-        incomingPhone
-      )
-      .limit(1)
-      .maybeSingle();
+      .eq("provider_id", patient.provider_id);
 
-    if (error && error.code !== "PGRST116") throw error;
-    if (data) existingPatient = data;
+    if (error) throw error;
+
+    if (data) {
+      const normalizedIncoming = incomingPhone;
+
+      const found = data.find((p) => {
+        const digits = (p.cell_phone || "").replace(/\D/g, "");
+        return digits === normalizedIncoming;
+      });
+
+      if (found) {
+        existingPatient = found;
+      }
+    }
   }
+
 
   // -------------------------------------------------
   // 2. PRIMARY OR SECONDARY EMAIL MATCH (if no phone)
