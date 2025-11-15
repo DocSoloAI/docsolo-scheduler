@@ -46,22 +46,22 @@ export async function upsertPatientAndCreateAppointment(
 
   let existingPatient: any | null = null;
 
-  // -----------------------------
   // 1. MASTER MATCH: Phone number
-  // -----------------------------
   if (incomingPhone) {
     const { data, error } = await supabase
       .from("patients")
       .select("id, email, other_emails, cell_phone, first_name, last_name, allow_text")
       .eq("provider_id", patient.provider_id)
-      // normalize phone for both sides
-      .or(`regexp_replace(cell_phone, '[^0-9]', '', 'g').eq.${incomingPhone}`)
-      .limit(1);
+      .filter(
+        `regexp_replace(cell_phone, '[^0-9]', '', 'g')`,
+        "eq",
+        incomingPhone
+      )
+      .limit(1)
+      .maybeSingle();
 
-    if (error) throw error;
-    if (data && data.length > 0) {
-      existingPatient = data[0];
-    }
+    if (error && error.code !== "PGRST116") throw error;
+    if (data) existingPatient = data;
   }
 
   // -------------------------------------------------
