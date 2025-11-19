@@ -756,6 +756,18 @@ export default function BookingPage() {
 
       // Provider email
       if (providerEmail) {
+        // 🔍 LOG EXACT VALUES THAT WILL BE SENT
+        console.log("📨 PROVIDER EMAIL appointmentData =", {
+          street,
+          city,
+          state,
+          zip,
+          primaryInsurance,
+          primaryID,
+          secondaryInsurance,
+          secondaryID,
+          patientNote: comments,
+        });
         await sendTemplatedEmail({
           templateType: rescheduleId
             ? "provider_update"
