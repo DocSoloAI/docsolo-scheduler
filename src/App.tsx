@@ -17,7 +17,6 @@ import { Toaster } from "sonner";
 function BookingWithProvider({ children }: { children: React.ReactNode }) {
   const subdomain = getSubdomain();
   const [providerId, setProviderId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function fetchProvider() {
@@ -33,15 +32,16 @@ function BookingWithProvider({ children }: { children: React.ReactNode }) {
       } else if (data) {
         setProviderId(data.id);
       }
-      setLoading(false);
     }
     fetchProvider();
   }, [subdomain]);
 
+  // Only one guard
   if (!providerId) return null;
-  if (!providerId) return <div>Provider not found</div>;
 
-  return <SettingsProvider providerId={providerId}>{children}</SettingsProvider>;
+  return (
+    <SettingsProvider providerId={providerId}>{children}</SettingsProvider>
+  );
 }
 
 export default function App() {
