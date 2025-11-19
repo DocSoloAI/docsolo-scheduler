@@ -13,6 +13,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { toast } from "react-hot-toast";
+import { formatPhone } from "@/utils/formatPhone";
 
 interface PatientsTabProps {
   providerId: string;
@@ -344,7 +345,7 @@ const savePatient = async () => {
                   >
                     <td className="p-2">{p.full_name}</td>
                     <td className="p-2">{p.email || "—"}</td>
-                    <td className="p-2">{p.cell_phone || "—"}</td>
+                    <td className="p-2">{formatPhone(p.cell_phone) || "—"}</td>
                     <td className="p-2 text-center">{p.visit_count || 0}</td>
                     <td className="p-2 text-center">
                       {p.last_appointment
@@ -480,10 +481,25 @@ const savePatient = async () => {
               <Input
                 type="tel"
                 value={form.cell_phone}
-                onChange={(e) =>
-                  setForm({ ...form, cell_phone: e.target.value })
-                }
+                onChange={(e) => {
+                  const digits = e.target.value.replace(/\D/g, "");
+                  if (digits.length > 10) return;
+                  setForm({ ...form, cell_phone: formatPhone(digits) });
+                }}
               />
+              <div className="mt-3">
+                <Label>Home Phone</Label>
+                <Input
+                  type="tel"
+                  value={form.home_phone || ""}
+                  onChange={(e) => {
+                    const digits = e.target.value.replace(/\D/g, "");
+                    if (digits.length > 10) return;
+                    setForm({ ...form, home_phone: formatPhone(digits) });
+                  }}
+                />
+              </div>
+
               {/* ✅ Allow Text Reminders */}
               <div className="flex items-center gap-2 mt-2">
                 <input
