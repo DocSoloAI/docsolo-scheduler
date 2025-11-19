@@ -764,13 +764,28 @@ export default function BookingPage() {
           providerId,
           appointmentData: {
             patientName: fullName,
-            patientEmail: normalizedEmail, // ✅ lowercase for consistency
-            patientPhone: cellPhone || "(no phone provided)", // ✅ now safely included
+            patientEmail: normalizedEmail,
+            patientPhone: cellPhone || "(no phone provided)",
             date: formattedDate,
             time: formattedTime,
             service: service.name,
             appointmentId,
             patientNote: comments || "",
+
+            // 🆕 FULL INTAKE INFO FOR PROVIDER ONLY
+            address: {
+              street,
+              city,
+              state,
+              zip,
+            },
+            insurance: {
+              primaryInsurance,
+              primaryID,
+              secondaryInsurance,
+              secondaryID,
+            },
+
             manageLink: "",
             officeName: providerOfficeName,
             providerPhone,
@@ -779,7 +794,7 @@ export default function BookingPage() {
           },
         });
       }
-
+      
       // 3. Mark confirmed
       setAppointmentId(appointmentId);
       setConfirmed(true);

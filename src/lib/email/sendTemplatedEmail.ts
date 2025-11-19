@@ -9,6 +9,22 @@ interface AppointmentData {
   service: string;
   appointmentId: string;
   manageLink: string;
+
+  // 🆕 Full patient intake info (provider email only)
+  address?: {
+    street?: string;
+    city?: string;
+    state?: string;
+    zip?: string;
+  };
+
+  insurance?: {
+    primaryInsurance?: string;
+    primaryID?: string;
+    secondaryInsurance?: string;
+    secondaryID?: string;
+  };
+
   officeName?: string;
   providerName?: string;
   location?: string;

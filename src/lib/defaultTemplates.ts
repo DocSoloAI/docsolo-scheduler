@@ -269,7 +269,27 @@ export function defaultTemplates(providerId: string) {
     Phone: {{patientPhone}}
     Service: {{service}}
     Date/Time: {{date}} at {{time}}
+
+    {{#if address.street}}
+    Address:
+      {{address.street}}
+      {{address.city}}, {{address.state}} {{address.zip}}
+    {{/if}}
+
+    {{#if insurance.primaryInsurance}}
+    Primary Insurance:
+      Company: {{insurance.primaryInsurance}}
+      ID: {{insurance.primaryID}}
+    {{/if}}
+
+    {{#if insurance.secondaryInsurance}}
+    Secondary Insurance:
+      Company: {{insurance.secondaryInsurance}}
+      ID: {{insurance.secondaryID}}
+    {{/if}}
+
     {{#if patientNote}}Notes from patient: "{{patientNote}}"{{/if}}
+
     Appointment ID: {{appointmentId}}
       `,
       html_body: `
@@ -280,11 +300,38 @@ export function defaultTemplates(providerId: string) {
           <p><strong>Phone:</strong> {{patientPhone}}</p>
           <p><strong>Service:</strong> {{service}}</p>
           <p><strong>Date/Time:</strong> {{date}} at {{time}}</p>
+
+          {{#if address.street}}
+            <p style="margin-top:1em;">
+              <strong>Address:</strong><br/>
+              {{address.street}}<br/>
+              {{address.city}}, {{address.state}} {{address.zip}}
+            </p>
+          {{/if}}
+
+          {{#if insurance.primaryInsurance}}
+            <p style="margin-top:1em;">
+              <strong>Primary Insurance:</strong><br/>
+              Company: {{insurance.primaryInsurance}}<br/>
+              ID: {{insurance.primaryID}}
+            </p>
+          {{/if}}
+
+          {{#if insurance.secondaryInsurance}}
+            <p style="margin-top:1em;">
+              <strong>Secondary Insurance:</strong><br/>
+              Company: {{insurance.secondaryInsurance}}<br/>
+              ID: {{insurance.secondaryID}}
+            </p>
+          {{/if}}
+
           {{#if patientNote}}
-            <p style="background:#fef3c7; color:#92400e; padding:10px 12px; border-radius:6px; margin-top:1em; font-size:0.9rem;">
+            <p style="background:#fef3c7; color:#92400e; padding:10px 12px;
+              border-radius:6px; margin-top:1em; font-size:0.9rem;">
               <strong>Patient Note:</strong> "{{patientNote}}"
             </p>
           {{/if}}
+
           <p style="margin-top:1.5em; font-size:0.8rem; color:#777;">Appointment ID: {{appointmentId}}</p>
         </div>
       `,
