@@ -863,11 +863,11 @@ export default function BookingPage() {
       <div className="max-w-3xl mx-auto p-8 min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-slate-100">
         <div className="text-center space-y-4">
           <div className="animate-pulse space-y-3">
-            <div className="h-10 bg-gray-200 rounded w-64 mx-auto"></div>
-            <div className="h-4 bg-gray-100 rounded w-48 mx-auto"></div>
-            <div className="h-4 bg-gray-100 rounded w-40 mx-auto"></div>
+            <div className="h-10 bg-transparent rounded w-64 mx-auto"></div>
+            <div className="h-4 bg-transparent rounded w-48 mx-auto"></div>
+            <div className="h-4 bg-transparent rounded w-40 mx-auto"></div>
           </div>
-          <p className="text-gray-500 text-sm mt-4">Loading...</p>
+          <p className="text-gray-500 text-sm mt-4"></p>
         </div>
       </div>
     );

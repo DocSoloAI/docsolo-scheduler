@@ -38,7 +38,7 @@ function BookingWithProvider({ children }: { children: React.ReactNode }) {
     fetchProvider();
   }, [subdomain]);
 
-  if (loading) return <div>Loading...</div>;
+  if (!providerId) return null;
   if (!providerId) return <div>Provider not found</div>;
 
   return <SettingsProvider providerId={providerId}>{children}</SettingsProvider>;
