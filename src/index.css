@@ -73,10 +73,14 @@
   * {
     @apply border-border;
   }
+
   body {
-    @apply bg-background text-foreground;
+    /* Match BookingPage gradient so there is ZERO flash */
+    background: linear-gradient(to bottom right, #fafafa, #f1f5f9);
+    color: hsl(var(--foreground));
   }
 }
+
 
 /* === Scrollbar behavior === */
 html {
