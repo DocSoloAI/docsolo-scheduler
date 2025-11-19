@@ -772,19 +772,15 @@ export default function BookingPage() {
             appointmentId,
             patientNote: comments || "",
 
-            // 🆕 FULL INTAKE INFO FOR PROVIDER ONLY
-            address: {
-              street,
-              city,
-              state,
-              zip,
-            },
-            insurance: {
-              primaryInsurance,
-              primaryID,
-              secondaryInsurance,
-              secondaryID,
-            },
+            // 🆕 FULL INTAKE INFO FOR PROVIDER ONLY (FIXED: FLATTENED)
+            street,
+            city,
+            state,
+            zip,
+            primaryInsurance,
+            primaryID,
+            secondaryInsurance,
+            secondaryID,
 
             manageLink: "",
             officeName: providerOfficeName,
@@ -794,7 +790,8 @@ export default function BookingPage() {
           },
         });
       }
-      
+
+
       // 3. Mark confirmed
       setAppointmentId(appointmentId);
       setConfirmed(true);

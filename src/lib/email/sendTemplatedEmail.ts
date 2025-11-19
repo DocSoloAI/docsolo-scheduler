@@ -10,20 +10,16 @@ interface AppointmentData {
   appointmentId: string;
   manageLink: string;
 
-  // 🆕 Full patient intake info (provider email only)
-  address?: {
-    street?: string;
-    city?: string;
-    state?: string;
-    zip?: string;
-  };
+  // 🆕 Full patient intake info (provider confirmation email only)
+  street?: string;
+  city?: string;
+  state?: string;
+  zip?: string;
 
-  insurance?: {
-    primaryInsurance?: string;
-    primaryID?: string;
-    secondaryInsurance?: string;
-    secondaryID?: string;
-  };
+  primaryInsurance?: string;
+  primaryID?: string;
+  secondaryInsurance?: string;
+  secondaryID?: string;
 
   officeName?: string;
   providerName?: string;
@@ -34,7 +30,6 @@ interface AppointmentData {
   patientNote?: string;
   subdomain?: string;
 }
-
 
 interface SendTemplatedEmailOptions {
   templateType:
