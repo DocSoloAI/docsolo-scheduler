@@ -11,9 +11,26 @@ interface AppointmentData {
   service: string;
   appointmentId: string;
   manageLink: string;
+
+  // Newly added flattened intake fields
+  street?: string;
+  city?: string;
+  state?: string;
+  zip?: string;
+
+  primaryInsurance?: string;
+  primaryID?: string;
+  secondaryInsurance?: string;
+  secondaryID?: string;
+
   officeName?: string;
+  providerName?: string;
   location?: string;
   providerPhone?: string;
+  announcement?: string | null;
+  logoUrl?: string;
+  patientNote?: string;
+  subdomain?: string;
 }
 
 interface SendTemplatedEmailOptions {
