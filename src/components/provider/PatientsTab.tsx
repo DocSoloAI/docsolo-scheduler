@@ -413,7 +413,7 @@ const savePatient = async () => {
             </div>
 
             <div>
-              <Label>Email</Label>
+              <Label>Primary Email</Label>
               <Input
                 type="email"
                 value={form.email}
@@ -421,6 +421,9 @@ const savePatient = async () => {
                   setForm({ ...form, email: e.target.value })
                 }
               />
+              <p className="text-xs text-gray-500 mt-1">
+                This is the email used for confirmations and reminders.
+              </p>
             </div>
 
             {/* Secondary Emails */}

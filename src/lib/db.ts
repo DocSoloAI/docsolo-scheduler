@@ -79,7 +79,7 @@ export async function upsertPatientAndCreateAppointment(
       .select("id, email, other_emails, cell_phone, first_name, last_name, allow_text")
       .eq("provider_id", patient.provider_id)
       .or(
-        `lower(email).eq.${incomingEmail},other_emails.cs.{${incomingEmail}}`
+        `email_lower.eq.${incomingEmail},other_emails_lower.cs.[\\"${incomingEmail}\\"]`
       )
       .limit(1);
 
@@ -97,9 +97,10 @@ export async function upsertPatientAndCreateAppointment(
       .from("patients")
       .select("id, email, other_emails, cell_phone, first_name, last_name, allow_text")
       .eq("provider_id", patient.provider_id)
-      .eq("lower(first_name)", incomingFirst)
-      .eq("lower(last_name)", incomingLast)
-      .eq("lower(email)", incomingEmail)
+      .eq("first_name_lower", incomingFirst)
+      .eq("last_name_lower", incomingLast)
+      .eq("email_lower", incomingEmail)
+
       .limit(1);
 
     if (error) throw error;
@@ -188,7 +189,7 @@ export async function upsertPatientAndCreateAppointment(
       service_id: appointment.service_id,
       start_time: appointment.start_time,
       end_time: appointment.end_time,
-      status: appointment.status ?? "confirmed",
+      status: appointment.status ?? "booked",
       patient_note: appointment.patient_note ?? null,
       provider_id: patient.provider_id,
     })
