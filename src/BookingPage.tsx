@@ -477,26 +477,29 @@ export default function BookingPage() {
   }, [patientType, services]);
 
 
-  // 👇 Scroll when date chosen → Times list
+  // 👇 Scroll when date chosen → Times list (only after times render)
   useEffect(() => {
     if (!selectedDate) return;
 
-    setTimeout(() => {
-      // First scroll to the section
-      dateTimeRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
+    // Poll for the times container for up to 500ms
+    let attempts = 0;
+    const interval = setInterval(() => {
+      const timesExist = document.querySelector("#datetime-section button");
 
-      // Then gently nudge upward so times are clearly visible
-      setTimeout(() => {
-        window.scrollBy({
-          top: -120,   // adjust if needed; -80 to -150 works great
-          behavior: "smooth",
-        });
-      }, 350);
-    }, 200);
-  }, [selectedDate]);
+      if (timesExist || attempts > 10) {
+        clearInterval(interval);
+
+        setTimeout(() => {
+          dateTimeRef.current?.scrollIntoView({
+            behavior: "smooth",
+            block: "start",
+          });
+        }, 50);
+      }
+
+      attempts++;
+    }, 50);
+  }, [selectedDate, availableTimes]);
 
 
   // 👇 Scroll when time chosen → Patient Info
