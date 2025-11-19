@@ -19,6 +19,7 @@ export default function BookingPage() {
   const { services } = useSettings();
   const [providerId, setProviderId] = useState<string | null>(null);
   const [providerEmail, setProviderEmail] = useState<string | null>(null);
+  const [providerLoaded, setProviderLoaded] = useState(false);
 
   const [providerOfficeName, setProviderOfficeName] = useState<string>("");
   const [providerPhone, setProviderPhone] = useState("");
@@ -103,6 +104,7 @@ export default function BookingPage() {
       if (error || !provider) {
         console.error("Provider not found:", error);
         setProviderOfficeName("ERROR_NOT_FOUND");
+        setProviderLoaded(true);
         return;
       }
 
@@ -118,8 +120,9 @@ export default function BookingPage() {
       setProviderZip(provider.zip || "");
 
       if (provider?.timezone) setProviderTimezone(provider.timezone);
-    };
-    
+
+      setProviderLoaded(true);
+    };    
 
     loadProvider();
   }, []);
@@ -855,7 +858,7 @@ export default function BookingPage() {
   }
 
   // ✅ NEW: Show loading state while provider data loads
-  if (!providerOfficeName && !bookingComplete) {
+  if (!providerLoaded && !bookingComplete) {
     return (
       <div className="max-w-3xl mx-auto p-8 min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-slate-100">
         <div className="text-center space-y-4">
