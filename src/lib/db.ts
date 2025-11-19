@@ -79,8 +79,9 @@ export async function upsertPatientAndCreateAppointment(
       .select("id, email, other_emails, cell_phone, first_name, last_name, allow_text")
       .eq("provider_id", patient.provider_id)
       .or(
-        `email_lower.eq.${incomingEmail},other_emails_lower.cs.[\\"${incomingEmail}\\"]`
+        `email_lower.eq.${incomingEmail},other_emails_lower.cs.{"${incomingEmail}"}`
       )
+
       .limit(1);
 
     if (error) throw error;
