@@ -443,6 +443,8 @@ async function loadAvailabilityOverrides() {
               service_id: appt.service_id,
               status: appt.status,
               patient_note: appt.patient_note || null,
+              patient_first_name: patient?.first_name || "",
+              patient_last_name: patient?.last_name || "",
             },
           };
         }) ?? [];
@@ -759,6 +761,8 @@ async function loadAvailabilityOverrides() {
       start: startLocal,
       end: endLocal,
       patient_id: event.extendedProps.patient_id,
+      patient_first_name: event.extendedProps.patient_first_name,
+      patient_last_name: event.extendedProps.patient_last_name,
       service_id: event.extendedProps.service_id,
       status: event.extendedProps.status,
       patient_note: event.extendedProps.patient_note || null,
