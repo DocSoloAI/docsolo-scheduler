@@ -479,14 +479,23 @@ export default function BookingPage() {
 
   // 👇 Scroll when date chosen → Times list
   useEffect(() => {
-    if (selectedDate) {
+    if (!selectedDate) return;
+
+    setTimeout(() => {
+      // First scroll to the section
+      dateTimeRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+
+      // Then gently nudge upward so times are clearly visible
       setTimeout(() => {
-        dateTimeRef.current?.scrollIntoView({
+        window.scrollBy({
+          top: -120,   // adjust if needed; -80 to -150 works great
           behavior: "smooth",
-          block: "start",
         });
-      }, 200);
-    }
+      }, 350);
+    }, 200);
   }, [selectedDate]);
 
 
