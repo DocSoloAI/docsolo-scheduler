@@ -1185,7 +1185,6 @@ export default function BookingPage() {
                           <Input
                             type="tel"
                             inputMode="numeric"
-                            pattern="[0-9/]*"
                             placeholder="MM/DD/YYYY"
                             value={birthday}
                             onChange={(e) => {
@@ -1217,6 +1216,7 @@ export default function BookingPage() {
                             required
                             className="text-lg tracking-wider"
                           />
+
                         </div>
                       )}
                     </div>
