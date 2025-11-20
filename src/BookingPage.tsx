@@ -85,9 +85,6 @@ export default function BookingPage() {
               const patient = Array.isArray(data?.patients)
                 ? data.patients[0]
                 : data?.patients;
-              const service = Array.isArray(data?.services)
-                ? data.services[0]
-                : data?.services;
 
               if (patient) {
                 setFirstName(patient.first_name || "");
@@ -174,6 +171,26 @@ export default function BookingPage() {
   const [comments, setComments] = useState("");
   const [allowText, setAllowText] = useState(false);
   const [formError, setFormError] = useState("");
+  const [dobError, setDobError] = useState("");
+  // 🆕 Unified form validation helper
+  const isFormValid = () => {
+    if (!firstName || !lastName || !email) return false;
+
+    // email error
+    if (formError) return false;
+
+    // phone must be 10 digits unmasked
+    const phoneDigits = cellPhone.replace(/\D/g, "");
+    if (phoneDigits.length !== 10) return false;
+
+    // new patient: validate DOB
+    if (patientType === "new") {
+      if (!birthday || dobError) return false;
+    }
+
+    return true;
+  };
+
   const [rescheduleLoaded, setRescheduleLoaded] = useState(false);
   const [providerTimezone, setProviderTimezone] = useState("America/New_York");
 
@@ -1331,24 +1348,27 @@ export default function BookingPage() {
                           <label className="block text-sm font-medium text-gray-700 mb-1">
                             Date of Birth <span className="text-red-500">*</span>
                           </label>
+
                           <Input
                             type="tel"
                             inputMode="numeric"
                             placeholder="MM/DD/YYYY"
                             value={birthday}
                             onChange={(e) => {
-                              let val = e.target.value.replace(/\D/g, ""); // remove non-numeric
+                              let val = e.target.value.replace(/\D/g, "");
                               if (val.length > 8) val = val.slice(0, 8);
 
-                              // Auto-format MM/DD/YYYY
-                              if (val.length > 4) val = `${val.slice(0, 2)}/${val.slice(2, 4)}/${val.slice(4)}`;
-                              else if (val.length > 2) val = `${val.slice(0, 2)}/${val.slice(2)}`;
+                              // auto-format
+                              if (val.length > 4)
+                                val = `${val.slice(0, 2)}/${val.slice(2, 4)}/${val.slice(4)}`;
+                              else if (val.length > 2)
+                                val = `${val.slice(0, 2)}/${val.slice(2)}`;
 
                               setBirthday(val);
-                            }}
-                            onBlur={() => {
-                              if (birthday.length === 10) {
-                                const [mm, dd, yyyy] = birthday.split("/").map((n) => parseInt(n));
+
+                              // live validation
+                              if (val.length === 10) {
+                                const [mm, dd, yyyy] = val.split("/").map(Number);
                                 const isValid =
                                   mm >= 1 &&
                                   mm <= 12 &&
@@ -1356,16 +1376,18 @@ export default function BookingPage() {
                                   dd <= 31 &&
                                   yyyy > 1900 &&
                                   yyyy <= new Date().getFullYear();
-                                if (!isValid) {
-                                  toast.error("Please enter a valid date of birth (MM/DD/YYYY).");
-                                  setBirthday("");
-                                }
+
+                                setDobError(isValid ? "" : "Please enter a valid date of birth.");
+                              } else {
+                                setDobError("Please enter a valid date of birth.");
                               }
                             }}
-                            required
                             className="text-lg tracking-wider"
                           />
 
+                          {dobError && (
+                            <p className="text-red-600 text-sm mt-1">{dobError}</p>
+                          )}
                         </div>
                       )}
                     </div>
@@ -1591,10 +1613,15 @@ export default function BookingPage() {
                     )}
                     <Button
                       className="w-full mt-4"
-                      onClick={() => setShowConfirmModal(true)}
-                      disabled={confirmed || !selectedService}
+                      onClick={() => {
+                        if (!isFormValid()) {
+                          toast.error("Please complete all required fields before continuing.");
+                          return;
+                        }
+                        setShowConfirmModal(true);
+                      }}
+                      disabled={confirmed || !selectedService || !isFormValid()}
                     >
-
                       {confirmed
                         ? "Appointment Confirmed"
                         : "Review & Continue"}
