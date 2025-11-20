@@ -906,47 +906,50 @@ export default function BookingPage() {
   return (
     <div className="max-w-3xl mx-auto p-8 min-h-screen bg-gradient-to-br from-gray-50 to-slate-100">
       <AnimatePresence>
-        {/* 🟦 RESCHEDULE HEADER (Only when using ?reschedule=) */}
-        {isReschedule && rescheduleAppt && !bookingComplete && (
-          <div className="mb-8 p-6 bg-blue-50 border border-blue-200 rounded-xl shadow-sm">
-            <h1 className="text-3xl font-bold text-blue-800 mb-2">
-              Reschedule Appointment
-            </h1>
-            <p className="text-gray-700 mb-4">
-              You are updating an existing appointment.
-            </p>
-
-            <div className="bg-white border border-gray-200 rounded-lg p-4 mb-4">
-              <p className="text-gray-800 font-semibold">
-                {rescheduleAppt.patientName}
-              </p>
-              <p className="text-gray-700">
-                {rescheduleAppt.date.toLocaleString()}
-              </p>
-            </div>
-
-            <button
-              onClick={() =>
-                (window.location.href = `https://${getSubdomain()}.bookthevisit.com/manage/${rescheduleId}?token=${token}`)
-              }
-              className="text-blue-700 underline text-sm hover:text-blue-900"
-            >
-              Back to Manage Appointment
-            </button>
-
-            <p className="text-xs text-gray-500 mt-2">
-              We’ve loaded your information from your existing appointment.
-              You can update any info before confirming.
-            </p>
-          </div>
-        )}
-
         {/* 👇 Hide booking UI after confirmed */}
-        {!bookingComplete && providerOfficeName && (          <>
-            {/* Page header */}
-            <h1 className="text-4xl font-extrabold text-blue-700 mb-10 text-center animate-fadeIn">
-              {providerOfficeName}
-            </h1>
+        {!bookingComplete && providerOfficeName && (
+          <>
+            {/* 🟦 RESCHEDULE HEADER */}
+            {isReschedule && rescheduleAppt && (
+              <div className="mb-8 p-6 bg-blue-50 border border-blue-200 rounded-xl shadow-sm">
+                <h1 className="text-3xl font-bold text-blue-800 mb-2">
+                  Reschedule Appointment
+                </h1>
+                <p className="text-gray-700 mb-4">
+                  You are updating an existing appointment.
+                </p>
+
+                <div className="bg-white border border-gray-200 rounded-lg p-4 mb-4">
+                  <p className="text-gray-800 font-semibold">
+                    {rescheduleAppt.patientName}
+                  </p>
+                  <p className="text-gray-700">
+                    {rescheduleAppt.date.toLocaleString()}
+                  </p>
+                </div>
+
+                <button
+                  onClick={() =>
+                    (window.location.href = `https://${getSubdomain()}.bookthevisit.com/manage/${rescheduleId}?token=${token}`)
+                  }
+                  className="text-blue-700 underline text-sm hover:text-blue-900"
+                >
+                  Back to Manage Appointment
+                </button>
+
+                <p className="text-xs text-gray-500 mt-2">
+                  We’ve loaded your information from your existing appointment.
+                  You can update any info before confirming.
+                </p>
+              </div>
+            )}
+
+            {/* Page header (only show if NOT rescheduling) */}
+            {!isReschedule && (
+              <h1 className="text-4xl font-extrabold text-blue-700 mb-10 text-center animate-fadeIn">
+                {providerOfficeName}
+              </h1>
+            )}
 
             {/* ✅ Custom announcement right below the page title */}
             {providerAnnouncement && (
