@@ -50,49 +50,58 @@ export default function BookingPage() {
 
   useEffect(() => {
     if (rescheduleId) {
+
+      // 🛑 NEW: Check appointment status before doing anything else
       supabase
         .from("appointments")
-        .select(`
-          id,
-          patients ( first_name, last_name, email, cell_phone ),
-          services ( id, name, duration_minutes )
-        `)
+        .select("status")
         .eq("id", rescheduleId)
         .single()
         .then(({ data, error }) => {
-          if (error) {
-            console.error("❌ Error fetching reschedule appt:", error.message);
+          if (error || !data) return;
+
+          if (data.status === "cancelled") {
+            setRescheduleAppt("cancelled"); // flag
             return;
           }
 
-          // unwrap relations (patients, services)
-          const patient = Array.isArray(data?.patients)
-            ? data.patients[0]
-            : data?.patients;
-          const service = Array.isArray(data?.services)
-            ? data.services[0]
-            : data?.services;
+          // If still active → continue loading full details
+          supabase
+            .from("appointments")
+            .select(`
+              id,
+              patients ( first_name, last_name, email, cell_phone ),
+              services ( id, name, duration_minutes )
+            `)
+            .eq("id", rescheduleId)
+            .single()
+            .then(({ data, error }) => {
+              if (error) {
+                console.error("❌ Error fetching reschedule appt:", error.message);
+                return;
+              }
 
-          if (patient) {
-            setFirstName(patient.first_name || "");
-            setLastName(patient.last_name || "");
-            setEmail(patient.email || "");
-            setCellPhone(patient.cell_phone || "");
-          }
+              // unwrap relations
+              const patient = Array.isArray(data?.patients)
+                ? data.patients[0]
+                : data?.patients;
+              const service = Array.isArray(data?.services)
+                ? data.services[0]
+                : data?.services;
 
-          if (service) {
-            // if you actually track service choice
-            // setSelectedService(service.id);
-            if (service.duration_minutes) {
-              // only call if you have duration state
-              // setDuration(service.duration_minutes);
-            }
-          }
+              if (patient) {
+                setFirstName(patient.first_name || "");
+                setLastName(patient.last_name || "");
+                setEmail(patient.email || "");
+                setCellPhone(patient.cell_phone || "");
+              }
 
-          setRescheduleLoaded(true); // ✅ use your actual flag
+              setRescheduleLoaded(true);
+            });
         });
     }
   }, [rescheduleId]);
+
 
 
   useEffect(() => {
@@ -899,6 +908,34 @@ export default function BookingPage() {
           </div>
           <p className="text-gray-500 text-sm mt-4"></p>
         </div>
+      </div>
+    );
+  }
+
+  // 🆕 Guard: If attempting to reschedule a cancelled appointment, stop the page
+  if (rescheduleAppt === "cancelled") {
+    return (
+      <div className="max-w-3xl mx-auto p-8 min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-slate-100">
+        <Card className="shadow-lg border border-gray-200 rounded-2xl w-full max-w-lg">
+          <CardContent className="p-8 text-center space-y-4">
+            <div className="text-6xl mb-4">⚠️</div>
+            <h2 className="text-2xl font-bold text-red-600">
+              This appointment has already been cancelled
+            </h2>
+            <p className="text-gray-700">
+              It cannot be rescheduled.
+            </p>
+
+            <Button
+              onClick={() =>
+                (window.location.href = `https://${getSubdomain()}.bookthevisit.com/`)
+              }
+              className="bg-blue-600 hover:bg-blue-700 text-white mt-6"
+            >
+              Book a New Appointment
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }
