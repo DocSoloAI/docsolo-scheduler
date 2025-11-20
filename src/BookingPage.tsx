@@ -1254,8 +1254,6 @@ export default function BookingPage() {
               </motion.div>
             )}
 
-
-
             {/* PATIENT INFO */}
             {selectedTime && (
               <motion.div
@@ -1465,7 +1463,6 @@ export default function BookingPage() {
                         />
                       </div>
                     </div>
-
 
                     {/* New Patient Only extras */}
                     {patientType === "new" && (
