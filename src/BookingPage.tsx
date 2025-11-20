@@ -1253,6 +1253,7 @@ export default function BookingPage() {
                 </Card>
               </motion.div>
             )}
+            
 
             {/* PATIENT INFO */}
             {selectedTime && (
