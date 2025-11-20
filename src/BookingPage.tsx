@@ -1090,7 +1090,8 @@ export default function BookingPage() {
                 </div>
               )}
             </motion.div>
-            )}
+          )}
+
 
             {/* DATE & TIME */}
             {(patientType || isReschedule) && (
@@ -1198,6 +1199,7 @@ export default function BookingPage() {
                 </Card>
               </motion.div>
             )}
+
 
 
             {/* PATIENT INFO */}
@@ -1563,9 +1565,10 @@ export default function BookingPage() {
                   </CardContent>
                 </Card>
               </motion.div>
-            )}
+          )}
           </>
         )}
+
 
         {bookingComplete && confirmed && (
           <div className="bg-green-100 text-green-800 p-6 rounded-lg text-center mt-12 max-w-xl mx-auto">
