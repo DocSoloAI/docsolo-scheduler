@@ -907,7 +907,7 @@ export default function BookingPage() {
     <div className="max-w-3xl mx-auto p-8 min-h-screen bg-gradient-to-br from-gray-50 to-slate-100">
       <AnimatePresence>
         {/* 👇 Hide booking UI after confirmed */}
-        {!bookingComplete && providerOfficeName && (
+        {!bookingComplete && (
           <>
             {/* 🟦 RESCHEDULE HEADER */}
             {isReschedule && rescheduleAppt && (
