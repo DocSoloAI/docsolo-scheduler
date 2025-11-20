@@ -36,7 +36,15 @@ export default function BookingPage() {
   const [showTextOptIn, setShowTextOptIn] = useState(false);
 
   const [searchParams] = useSearchParams();
+  const token = searchParams.get("token");
+
   const rescheduleId = searchParams.get("reschedule");
+  // 🆕 Simple flag for reschedule mode
+  const isReschedule = !!rescheduleId;
+
+  // 🆕 Store the appointment details to show in the header
+  const [rescheduleAppt, setRescheduleAppt] = useState<any>(null);
+
   const BOOKING_DOMAIN = "bookthevisit.com";
 
   useEffect(() => {
@@ -466,6 +474,16 @@ export default function BookingPage() {
     }
   }, [patientType]);
 
+  // 🆕 If rescheduling, auto-scroll to date/time once data loads
+  useEffect(() => {
+    if (isReschedule && rescheduleLoaded) {
+      setTimeout(() => {
+        dateTimeRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 300);
+    }
+  }, [isReschedule, rescheduleLoaded]);
+
+
   // ✅ Auto-select the only available service for this patient type
   useEffect(() => {
     if (!patientType) return;
@@ -528,10 +546,10 @@ export default function BookingPage() {
 
       const { data, error } = await supabase
         .from("appointments")
-        .select(
-          `
+        .select(`
           id,
           service_id,
+          start_time,
           patients (
             first_name,
             last_name,
@@ -543,9 +561,9 @@ export default function BookingPage() {
             city,
             state,
             zip
-          )
-          `
-        )
+          ),
+          services ( name, default_for )
+        `)
         .eq("id", rescheduleId)
         .single();
 
@@ -554,24 +572,35 @@ export default function BookingPage() {
         return;
       }
 
-      // Pre-fill form fields
-      const p = data.patients?.[0];
-      const existingServiceId = data.service_id;
-      if (existingServiceId) {
-        const svc = services.find(s => s.id === existingServiceId);
-        if (svc) {
-          // force patient type to match default_for of the service
-          setPatientType(svc.default_for as "new" | "established");
-        }
+      // 🆕 Save appointment so we can show it in the header
+      const svc = Array.isArray(data.services) ? data.services[0] : data.services;
+      const patientObj = Array.isArray(data.patients) ? data.patients[0] : data.patients;
+
+      setRescheduleAppt({
+        patientName: patientObj
+          ? patientObj.first_name + " " + patientObj.last_name
+          : "",
+        date: new Date(data.start_time),
+        serviceName: svc?.name || "",
+        patient: patientObj
+      });
+
+      // 🆕 Force correct patient type based on service
+      if (svc?.default_for) {
+        setPatientType(svc.default_for as "new" | "established");
       }
 
+      // 🆕 Pre-fill patient fields
+      const p = data.patients?.[0];
       if (p) {
         setFirstName(p.first_name || "");
         setLastName(p.last_name || "");
         setEmail(p.email || "");
         setCellPhone(p.cell_phone || "");
         setHomePhone(p.home_phone || "");
-        setBirthday(p.birthday ? new Date(p.birthday).toLocaleDateString("en-US") : "");
+        setBirthday(
+          p.birthday ? new Date(p.birthday).toLocaleDateString("en-US") : ""
+        );
         setStreet(p.street || "");
         setCity(p.city || "");
         setState(p.state || "");
@@ -876,6 +905,41 @@ export default function BookingPage() {
   return (
     <div className="max-w-3xl mx-auto p-8 min-h-screen bg-gradient-to-br from-gray-50 to-slate-100">
       <AnimatePresence>
+        {/* 🟦 RESCHEDULE HEADER (Only when using ?reschedule=) */}
+        {isReschedule && rescheduleAppt && !bookingComplete && (
+          <div className="mb-8 p-6 bg-blue-50 border border-blue-200 rounded-xl shadow-sm">
+            <h1 className="text-3xl font-bold text-blue-800 mb-2">
+              Reschedule Appointment
+            </h1>
+            <p className="text-gray-700 mb-4">
+              You are updating an existing appointment.
+            </p>
+
+            <div className="bg-white border border-gray-200 rounded-lg p-4 mb-4">
+              <p className="text-gray-800 font-semibold">
+                {rescheduleAppt.patientName}
+              </p>
+              <p className="text-gray-700">
+                {rescheduleAppt.date.toLocaleString()}
+              </p>
+            </div>
+
+            <button
+              onClick={() =>
+                (window.location.href = `https://${getSubdomain()}.bookthevisit.com/manage/${rescheduleId}?token=${token}`)
+              }
+              className="text-blue-700 underline text-sm hover:text-blue-900"
+            >
+              Back to Manage Appointment
+            </button>
+
+            <p className="text-xs text-gray-500 mt-2">
+              We’ve loaded your information from your existing appointment.
+              You can update any info before confirming.
+            </p>
+          </div>
+        )}
+
         {/* 👇 Hide booking UI after confirmed */}
         {!bookingComplete && providerOfficeName && (          <>
             {/* Page header */}
@@ -904,7 +968,7 @@ export default function BookingPage() {
               </h2>
 
               {/* Step 1: Choose patient type */}
-              {!patientType && (
+              {!patientType && !isReschedule && (
                 <div className="flex flex-col items-center gap-6">
                   <div className="flex flex-wrap justify-center gap-4">
                     <Button
@@ -933,7 +997,7 @@ export default function BookingPage() {
               )}
 
               {/* Step 2: Show available services for that type */}
-              {patientType && (
+              {patientType && !isReschedule && (
                 <div className="mt-8 space-y-6">
                   <div className="text-center">
                     <button
@@ -1022,7 +1086,7 @@ export default function BookingPage() {
             </motion.div>
 
             {/* DATE & TIME */}
-            {patientType && (
+            {!patientType && !isReschedule && (
               <motion.div
                 id="datetime-section"
                 key="datetime"
