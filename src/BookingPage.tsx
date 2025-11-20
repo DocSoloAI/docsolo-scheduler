@@ -35,13 +35,15 @@ export default function BookingPage() {
   const [manageToken, setManageToken] = useState<string | null>(null);
   const [showTextOptIn, setShowTextOptIn] = useState(false);
 
-  const [searchParams] = useSearchParams();
+  // Always parse URL manually, react-router can't read URL params on the public booking domain
+  const searchParams = new URLSearchParams(window.location.search);
   const token = searchParams.get("token");
 
   const rescheduleId = searchParams.get("reschedule");
+
   // 🆕 Simple flag for reschedule mode
   const isReschedule = !!rescheduleId;
-
+  
   // 🆕 Store the appointment details to show in the header
   const [rescheduleAppt, setRescheduleAppt] = useState<any>(null);
 
