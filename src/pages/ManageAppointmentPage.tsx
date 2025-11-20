@@ -93,7 +93,14 @@ export default function ManageAppointmentPage() {
   }, [appointmentId]);
 
   const handleCancel = async () => {
-    if (!appointment) return;
+
+      if (!appointment) return;
+
+      // 🛑 Prevent duplicate cancels
+      if (appointment.status === "cancelled") {
+        toast.error("This appointment is already cancelled.");
+        return;
+      }
 
     const { error } = await supabase
       .from("appointments")
@@ -227,9 +234,35 @@ export default function ManageAppointmentPage() {
     return <p className="p-6 text-center text-red-600">Appointment not found or link expired.</p>;
   }
 
+  // 🆕 Show a specific message for already cancelled appointments
+  if (appointment.status === "cancelled") {
+    return (
+      <div className="p-6 flex items-center justify-center min-h-screen bg-gradient-to-br from-gray-50 to-slate-100">
+        <Card className="shadow-lg border border-gray-200 rounded-2xl w-full max-w-lg">
+          <CardContent className="p-8 text-center space-y-4">
+            <div className="text-6xl mb-4">⚠️</div>
+            <h2 className="text-2xl font-bold text-red-600">
+              This appointment has already been cancelled
+            </h2>
+            <p className="text-gray-700">
+              No further changes can be made.
+            </p>
+
+            <Button
+              onClick={() => navigate("/booking")}
+              className="bg-blue-600 hover:bg-blue-700 text-white mt-6"
+            >
+              Book a New Appointment
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 flex items-center justify-center min-h-screen bg-gradient-to-br from-gray-50 to-slate-100">
-      {!cancelled ? (
+      {!cancelled && appointment.status !== "cancelled" ? (
         <Card className="shadow-lg border border-gray-200 rounded-2xl w-full max-w-lg">
           <CardContent className="p-8 space-y-6">
             <h2 className="text-2xl font-bold text-center text-gray-800">
