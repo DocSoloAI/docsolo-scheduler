@@ -960,16 +960,18 @@ export default function BookingPage() {
               </div>
             )}
 
-            {/* WHO’S BOOKING TODAY (multi-service upgrade) */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4 }}
-              className="mb-10"
-            >
-              <h2 className="text-2xl font-semibold mb-6 text-gray-800 text-center">
-                Who’s booking today?
-              </h2>
+            {/* WHO’S BOOKING TODAY (hide during reschedule) */}
+            {!isReschedule && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4 }}
+                className="mb-10"
+              >
+                <h2 className="text-2xl font-semibold mb-6 text-gray-800 text-center">
+                  Who’s booking today?
+                </h2>
+
 
               {/* Step 1: Choose patient type */}
               {!patientType && !isReschedule && (
@@ -1088,6 +1090,7 @@ export default function BookingPage() {
                 </div>
               )}
             </motion.div>
+            )}
 
             {/* DATE & TIME */}
             {(patientType || isReschedule) && (
