@@ -170,6 +170,9 @@ export default function BookingPage() {
   const [secondaryID, setSecondaryID] = useState("");
   const [comments, setComments] = useState("");
   const [allowText, setAllowText] = useState(false);
+  const [phoneError, setPhoneError] = useState("");
+  const [emailError, setEmailError] = useState("");
+
   const [formError, setFormError] = useState("");
   const [dobError, setDobError] = useState("");
   // 🆕 Unified form validation helper
@@ -1253,7 +1256,7 @@ export default function BookingPage() {
                 </Card>
               </motion.div>
             )}
-            
+
 
             {/* PATIENT INFO */}
             {selectedTime && (
@@ -1320,25 +1323,34 @@ export default function BookingPage() {
                           placeholder="Enter your email"
                           autoComplete="email"
                           value={email}
-                          onChange={(e) => setEmail(e.target.value.trim().toLowerCase())} // ✅ normalize
-                          onBlur={(e) => {
+                          onChange={(e) => {
                             const val = e.target.value.trim().toLowerCase();
+                            setEmail(val);
+
+                            // Live validation
                             if (!val) {
-                              setFormError("Email is required.");
+                              setEmailError("Email is required.");
                             } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val)) {
-                              setFormError("Please enter a valid email address.");
+                              setEmailError("Please enter a valid email address.");
                             } else {
-                              setFormError("");
+                              setEmailError("");
+                            }
+                          }}
+                          onBlur={() => {
+                            const val = email.trim().toLowerCase();
+                            if (!val) {
+                              setEmailError("Email is required.");
+                            } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val)) {
+                              setEmailError("Please enter a valid email address.");
+                            } else {
+                              setEmailError("");
                             }
                           }}
                           required
-                          aria-invalid={!!formError}
-                          aria-describedby="email-error"
                         />
-                        {formError && (
-                          <span id="email-error" className="mt-1 text-sm text-red-600">
-                            {formError}
-                          </span>
+
+                        {emailError && (
+                          <p className="text-red-600 text-sm mt-1">{emailError}</p>
                         )}
                       </div>
 
@@ -1424,14 +1436,18 @@ export default function BookingPage() {
                           }}
                           onBlur={() => {
                             const digits = cellPhone.replace(/\D/g, "");
-                            if (digits.length !== 10) {
-                              toast.error("Please enter a valid 10-digit mobile number.");
-                              setCellPhone("");
+                            if (!digits || digits.length !== 10) {
+                              setPhoneError("Please enter a valid 10-digit mobile phone number.");
+                            } else {
+                              setPhoneError("");
                             }
                           }}
                           required
                           className="text-lg tracking-wide"
                         />
+                        {phoneError && (
+                          <p className="text-red-600 text-sm mt-1">{phoneError}</p>
+                        )}
                       </div>
 
                       {/* Home Phone */}
@@ -1618,11 +1634,17 @@ export default function BookingPage() {
                         }
                         setShowConfirmModal(true);
                       }}
-                      disabled={confirmed || !selectedService || !isFormValid()}
+                      disabled={
+                        confirmed ||
+                        !selectedService ||
+                        (!!dobError && patientType === "new") ||
+                        !!phoneError ||
+                        !firstName ||
+                        !lastName ||
+                        !email
+                      }
                     >
-                      {confirmed
-                        ? "Appointment Confirmed"
-                        : "Review & Continue"}
+                      {confirmed ? "Appointment Confirmed" : "Review & Continue"}
                     </Button>
                   </CardContent>
                 </Card>
