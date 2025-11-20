@@ -8,7 +8,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabaseClient";
 import { parse } from "date-fns";
 import { getSubdomain } from "@/lib/getSubdomain";
-import { useSearchParams } from "react-router-dom";
 import { sendTemplatedEmail } from "@/lib/email/sendTemplatedEmail";
 import { useSettings } from "@/context/SettingsContext";
 import { upsertPatientAndCreateAppointment } from "@/lib/db";
@@ -43,7 +42,7 @@ export default function BookingPage() {
 
   // 🆕 Simple flag for reschedule mode
   const isReschedule = !!rescheduleId;
-  
+
   // 🆕 Store the appointment details to show in the header
   const [rescheduleAppt, setRescheduleAppt] = useState<any>(null);
 
@@ -1088,7 +1087,7 @@ export default function BookingPage() {
             </motion.div>
 
             {/* DATE & TIME */}
-            {!patientType && !isReschedule && (
+            {(patientType || isReschedule) && (
               <motion.div
                 id="datetime-section"
                 key="datetime"
