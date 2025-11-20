@@ -174,6 +174,8 @@ export default function BookingPage() {
   const [emailError, setEmailError] = useState("");
 
   const [formError, setFormError] = useState("");
+  const [emailWarning, setEmailWarning] = useState("");
+
   const [dobError, setDobError] = useState("");
   // 🆕 Unified form validation helper
   const isFormValid = () => {
@@ -643,6 +645,28 @@ export default function BookingPage() {
     loadRescheduleData();
   }, [rescheduleId, providerId, rescheduleLoaded]);
 
+  // 🆕 Gentle email verification using our API route
+  async function verifyEmailAddress(email: string): Promise<boolean> {
+    if (!email) return true; // don't block on empty yet
+
+    try {
+      const resp = await fetch(`/api/verify-email?email=${encodeURIComponent(email)}`);
+      const data = await resp.json();
+
+      if (!data.valid) {
+        // Only warn, don't block
+        setEmailWarning("This email may be mistyped. Please double-check it.");
+        return false;
+      }
+
+      setEmailWarning("");
+      return true;
+    } catch {
+      // If DNS check fails for network reasons, allow
+      setEmailWarning("");
+      return true;
+    }
+  }
 
 
   const handleConfirm = async () => {
@@ -1125,11 +1149,6 @@ export default function BookingPage() {
                                 {svc.description}
                               </p>
                             )}
-                            <p className="text-sm text-gray-500">
-                              {svc.duration_minutes
-                                ? `${svc.duration_minutes} minutes`
-                                : "Duration TBD"}
-                            </p>
                           </CardContent>
                         </Card>
                       ))}
@@ -1257,7 +1276,6 @@ export default function BookingPage() {
               </motion.div>
             )}
 
-
             {/* PATIENT INFO */}
             {selectedTime && (
               <motion.div
@@ -1314,10 +1332,13 @@ export default function BookingPage() {
 
                     {/* Row 2: Email (always) + DOB (new patients only) */}
                     <div className="grid md:grid-cols-2 gap-4">
+
+                      {/* LEFT COLUMN – EMAIL */}
                       <div className="flex flex-col">
                         <label className="block text-sm font-medium text-gray-700 mb-1">
                           Email <span className="text-red-500">*</span>
                         </label>
+
                         <Input
                           type="email"
                           placeholder="Enter your email"
@@ -1327,7 +1348,6 @@ export default function BookingPage() {
                             const val = e.target.value.trim().toLowerCase();
                             setEmail(val);
 
-                            // Live validation
                             if (!val) {
                               setEmailError("Email is required.");
                             } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val)) {
@@ -1352,8 +1372,14 @@ export default function BookingPage() {
                         {emailError && (
                           <p className="text-red-600 text-sm mt-1">{emailError}</p>
                         )}
+
+                        {/* 🟡 DNS warning */}
+                        {emailWarning && (
+                          <p className="text-yellow-700 text-sm mt-1">{emailWarning}</p>
+                        )}
                       </div>
 
+                      {/* RIGHT COLUMN – DOB */}
                       {patientType === "new" && (
                         <div className="flex flex-col">
                           <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1369,7 +1395,6 @@ export default function BookingPage() {
                               let val = e.target.value.replace(/\D/g, "");
                               if (val.length > 8) val = val.slice(0, 8);
 
-                              // auto-format
                               if (val.length > 4)
                                 val = `${val.slice(0, 2)}/${val.slice(2, 4)}/${val.slice(4)}`;
                               else if (val.length > 2)
@@ -1377,7 +1402,6 @@ export default function BookingPage() {
 
                               setBirthday(val);
 
-                              // live validation
                               if (val.length === 10) {
                                 const [mm, dd, yyyy] = val.split("/").map(Number);
                                 const isValid =
@@ -1401,7 +1425,9 @@ export default function BookingPage() {
                           )}
                         </div>
                       )}
-                    </div>
+
+                    </div>  {/* END GRID */}
+
 
                     {/* Row 3: Mobile + Home */}
                     <div className="grid md:grid-cols-2 gap-4">
@@ -1627,13 +1653,22 @@ export default function BookingPage() {
                     )}
                     <Button
                       className="w-full mt-4"
-                      onClick={() => {
+                      onClick={async () => {
                         if (!isFormValid()) {
                           toast.error("Please complete all required fields before continuing.");
                           return;
                         }
+
+                        // 🆕 Email typo-check before showing confirmation modal
+                        const ok = await verifyEmailAddress(email);
+                        if (!ok) {
+                          // Warning shows under the email field
+                          return;
+                        }
+
                         setShowConfirmModal(true);
                       }}
+
                       disabled={
                         confirmed ||
                         !selectedService ||
