@@ -175,6 +175,26 @@ export default function BookingPage() {
 
   const [formError, setFormError] = useState("");
   const [emailWarning, setEmailWarning] = useState("");
+  // 🔍 Fast, client-side typo detector
+  const commonTypos = [
+    "gmail.con",
+    "gmail.co",
+    "gmail.cim",
+    "gmal.com",
+    "gmial.com",
+    "gmai.com",
+    "gmail.net",
+    "yahoo.con",
+    "hotmai.com",
+    "outlok.com"
+  ];
+
+  const detectEmailTypo = (address: string) => {
+    const lower = address.toLowerCase();
+    return commonTypos.some((bad) => lower.endsWith(bad))
+      ? "This email may be mistyped. Please double-check it."
+      : "";
+  };
 
   const [dobError, setDobError] = useState("");
   // 🆕 Unified form validation helper
@@ -644,157 +664,6 @@ export default function BookingPage() {
 
     loadRescheduleData();
   }, [rescheduleId, providerId, rescheduleLoaded]);
-
-  // 🆕 Gentle email verification using our API route
-  async function verifyEmailAddress(email: string): Promise<boolean> {
-    if (!email) return true; // don't block on empty yet
-
-    try {
-      const resp = await fetch(`/api/verify-email?email=${encodeURIComponent(email)}`);
-      const data = await resp.json();
-
-      if (!data.valid) {
-        // Only warn, don't block
-        setEmailWarning("This email may be mistyped. Please double-check it.");
-        return false;
-      }
-
-      setEmailWarning("");
-      return true;
-    } catch {
-      // If DNS check fails for network reasons, allow
-      setEmailWarning("");
-      return true;
-    }
-  }
-
-  // Small helper: Levenshtein distance for short domain strings
-  function domainDistance(a: string, b: string): number {
-    const m = a.length;
-    const n = b.length;
-    const dp: number[][] = Array.from({ length: m + 1 }, () =>
-      Array(n + 1).fill(0)
-    );
-
-    for (let i = 0; i <= m; i++) dp[i][0] = i;
-    for (let j = 0; j <= n; j++) dp[0][j] = j;
-
-    for (let i = 1; i <= m; i++) {
-      for (let j = 1; j <= n; j++) {
-        if (a[i - 1] === b[j - 1]) {
-          dp[i][j] = dp[i - 1][j - 1];
-        } else {
-          dp[i][j] = Math.min(
-            dp[i - 1][j] + 1,
-            dp[i][j - 1] + 1,
-            dp[i - 1][j - 1] + 1
-          );
-        }
-      }
-    }
-
-    return dp[m][n];
-  }
-
-  // Decide if the new email looks like a simple typo compared to one on file
-  function isLikelyDomainTypo(existingEmail: string, newEmail: string): boolean {
-    const [existingLocal, existingDomain] = existingEmail.split("@");
-    const [newLocal, newDomain] = newEmail.split("@");
-
-    if (!existingLocal || !existingDomain || !newLocal || !newDomain) return false;
-
-    // To avoid false positives, only flag if local-part is identical
-    if (existingLocal !== newLocal) return false;
-
-    if (existingDomain === newDomain) return false;
-
-    const dist = domainDistance(existingDomain, newDomain);
-
-    // Domains are short, so distance 1 (or very small 2) is probably a typo
-    return dist <= 2;
-  }
-
-    // 🆕 Check this email against an existing patient record
-    async function checkEmailAgainstExistingPatient(email: string): Promise<boolean> {
-      // Only care about established patients, otherwise it will be noisy
-      if (patientType !== "established") {
-        return true;
-      }
-
-      if (!providerId) return true;
-
-      const normalizedEmail = email.trim().toLowerCase();
-      if (!normalizedEmail) return true;
-
-      // Need enough info to be confident it's the same person
-      const fn = firstName.trim().toLowerCase();
-      const ln = lastName.trim().toLowerCase();
-      const phone = cellPhone.trim();
-      if (!fn || !ln || !phone) return true;
-
-      try {
-        const { data, error } = await supabase
-          .from("patients")
-          .select("email, other_emails, email_lower, other_emails_lower")
-          .eq("provider_id", providerId)
-          .eq("first_name_lower", fn)
-          .eq("last_name_lower", ln)
-          .eq("cell_phone", phone)
-          .limit(1);
-
-        if (error || !data || data.length === 0) {
-          // No record to compare with
-          return true;
-        }
-
-        const existing = data[0] as any;
-
-        const primaryOnFile: string | null =
-          existing.email_lower ||
-          (existing.email ? String(existing.email).toLowerCase() : null);
-
-        const othersRaw: string[] =
-          existing.other_emails_lower ||
-          (Array.isArray(existing.other_emails) ? existing.other_emails : []);
-
-        const otherEmails = othersRaw
-          .filter((e: any) => typeof e === "string")
-          .map((e: string) => e.toLowerCase());
-
-        const knownEmails = [
-          ...(primaryOnFile ? [primaryOnFile] : []),
-          ...otherEmails,
-        ];
-
-        // If it exactly matches something on file, we’re good
-        if (knownEmails.includes(normalizedEmail)) {
-          setEmailWarning("");
-          return true;
-        }
-
-        // Otherwise, only "ding" it if it looks like a simple domain typo
-        const looksTypo =
-          (primaryOnFile && isLikelyDomainTypo(primaryOnFile, normalizedEmail)) ||
-          otherEmails.some((e) => isLikelyDomainTypo(e, normalizedEmail));
-
-        if (!looksTypo) {
-          // Probably a legit new email, don't get in the way
-          setEmailWarning("");
-          return true;
-        }
-
-        // Gentle warning, no hard block anywhere else
-        setEmailWarning(
-          "We have a different email on file for you. If you recently changed your email, that’s fine. Otherwise please double-check for typos."
-        );
-        return false;
-      } catch (err) {
-        console.error("❌ Error checking email against existing patient:", err);
-        // On error, fail open
-        return true;
-      }
-    }
-
 
   const handleConfirm = async () => {
     // ✅ Validation guard
@@ -1489,14 +1358,24 @@ export default function BookingPage() {
 
                           onBlur={() => {
                             const val = email.trim().toLowerCase();
+
                             if (!val) {
                               setEmailError("Email is required.");
-                            } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val)) {
-                              setEmailError("Please enter a valid email address.");
-                            } else {
-                              setEmailError("");
+                              return;
                             }
+
+                            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val)) {
+                              setEmailError("Please enter a valid email address.");
+                              return;
+                            }
+
+                            // Clear normal errors
+                            setEmailError("");
+
+                            // ⭐ Step 2: Fast typo detector
+                            setEmailWarning(detectEmailTypo(val));
                           }}
+
                           required
                         />
 
@@ -1790,23 +1669,13 @@ export default function BookingPage() {
                           return;
                         }
 
-                        // 1️⃣ DNS / obvious typo check (fast)
-                        const dnsOk = await verifyEmailAddress(email);
-                        if (!dnsOk) {
-                          // Warning shows under the email field
-                          return;
-                        }
+                        // Fast, instant typo detection
+                        const warning = detectEmailTypo(email);
+                        setEmailWarning(warning);  // only shows, does not block
 
-                        // 2️⃣ Compare against existing patient record (for returning patients)
-                        const matchOk = await checkEmailAgainstExistingPatient(email);
-                        if (!matchOk) {
-                          // Gentle warning under the email field
-                          return;
-                        }
-
-                        // 3️⃣ All good, show confirmation modal
-                        setShowConfirmModal(true);
+                        setShowConfirmModal(true); // modal opens instantly
                       }}
+
                       disabled={
                         confirmed ||
                         !selectedService ||
