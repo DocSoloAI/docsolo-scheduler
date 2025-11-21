@@ -33,6 +33,7 @@ export default function BookingPage() {
   const [bookingComplete, setBookingComplete] = useState(false);
   const [manageToken, setManageToken] = useState<string | null>(null);
   const [showTextOptIn, setShowTextOptIn] = useState(false);
+  const [emailMismatch, setEmailMismatch] = useState(false);
 
   // Always parse URL manually, react-router can't read URL params on the public booking domain
   const searchParams = new URLSearchParams(window.location.search);
@@ -194,58 +195,38 @@ export default function BookingPage() {
       : "";
   };
 
-  // 🧠 Gentle mismatch detector for established patients
-  async function checkEmailMismatch() {
-    if (patientType !== "established") {
-      setEmailWarning("");
-      return true;
-    }
-
-    if (!providerId) return true;
-
-    const normalizedEmail = email.trim().toLowerCase();
-    if (!normalizedEmail) return true;
-
-    // Require basic identifying info
-    const fn = firstName.trim().toLowerCase();
-    const ln = lastName.trim().toLowerCase();
-    const phone = cellPhone.replace(/\D/g, "");
-    if (!fn || !ln || phone.length !== 10) return true;
-
-    const { data, error } = await supabase
-      .from("patients")
-      .select("email_lower, other_emails_lower")
-      .eq("provider_id", providerId)
-      .eq("first_name_lower", fn)
-      .eq("last_name_lower", ln)
-      .eq("cell_phone", cellPhone)
-      .limit(1)
-      .maybeSingle();
-
-    if (error || !data) {
-      setEmailWarning("");
-      return true;
-    }
-
-    const known = [
-      data.email_lower || "",
-      ...(data.other_emails_lower || [])
-    ].filter(Boolean);
-
-    // Already matches
-    if (known.includes(normalizedEmail)) {
-      setEmailWarning("");
-      return true;
-    }
-
-    // Soft mismatch warning
-    setEmailWarning(
-      "This email doesn't match the one we have on file. If you recently changed your email, that's fine. Otherwise please double-check."
-    );
-
-    return false;
+  // 🧠 Fuzzy patient recognition
+  function namesAreClose(a: string, b: string): boolean {
+    if (!a || !b) return false;
+    const aa = a.toLowerCase();
+    const bb = b.toLowerCase();
+    if (aa === bb) return true;
+    return levenshteinDistance(aa, bb) <= 2; // small threshold
   }
 
+  function levenshteinDistance(a: string, b: string): number {
+    const m = a.length;
+    const n = b.length;
+    const dp: number[][] = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
+
+    for (let i = 0; i <= m; i++) dp[i][0] = i;
+    for (let j = 0; j <= n; j++) dp[0][j] = j;
+
+    for (let i = 1; i <= m; i++) {
+      for (let j = 1; j <= n; j++) {
+        if (a[i - 1] === b[j - 1]) {
+          dp[i][j] = dp[i - 1][j - 1];
+        } else {
+          dp[i][j] = Math.min(
+            dp[i - 1][j] + 1,     // deletion
+            dp[i][j - 1] + 1,     // insertion
+            dp[i - 1][j - 1] + 1  // substitution
+          );
+        }
+      }
+    }
+    return dp[m][n];
+  }
 
   const [dobError, setDobError] = useState("");
   // 🆕 Unified form validation helper
@@ -715,6 +696,55 @@ export default function BookingPage() {
 
     loadRescheduleData();
   }, [rescheduleId, providerId, rescheduleLoaded]);
+
+  // 🆕 Match patient + detect email mismatch
+  async function checkEmailMismatch(): Promise<boolean> {
+    if (!providerId) return false;
+
+    const fn = firstName.trim();
+    const ln = lastName.trim();
+    const phone = cellPhone.replace(/\D/g, "");
+    const enteredEmail = email.trim().toLowerCase();
+
+    if (!fn || !ln || phone.length !== 10) {
+      return false; // not enough info to match
+    }
+
+    // Look up patients with the same last name + phone
+    const { data, error } = await supabase
+      .from("patients")
+      .select("first_name, last_name, email_lower, other_emails_lower")
+      .eq("provider_id", providerId)
+      .eq("last_name_lower", ln.toLowerCase())
+      .eq("cell_phone", cellPhone)
+      .limit(5);
+
+    if (error || !data || data.length === 0) return false;
+
+    // Find best fuzzy match on first name
+    const matches = data.filter((p: any) =>
+      namesAreClose(p.first_name, fn)
+    );
+
+    if (matches.length === 0) return false;
+
+    // We assume the first is correct
+    const patient = matches[0];
+    const knownEmails = [
+      ...(patient.email_lower ? [patient.email_lower] : []),
+      ...(Array.isArray(patient.other_emails_lower) ? patient.other_emails_lower : [])
+    ];
+
+    // If email is already on file — no warning
+    if (knownEmails.includes(enteredEmail)) {
+      return false;
+    }
+
+    // Otherwise mismatch
+    return true;
+  }
+
+
 
   const handleConfirm = async () => {
     // ✅ Validation guard
@@ -1720,16 +1750,17 @@ export default function BookingPage() {
                           return;
                         }
 
-                        // Fast local typo detection
+                        // Fast typo detection
                         const warning = detectEmailTypo(email);
                         setEmailWarning(warning);
 
-                        // Quick Supabase mismatch check (new)
-                        await checkEmailMismatch();
+                        // 🆕 email mismatch check
+                        const mismatch = await checkEmailMismatch();
+                        setEmailMismatch(mismatch);
 
-                        // Open confirmation modal
                         setShowConfirmModal(true);
                       }}
+
 
                       disabled={
                         confirmed ||
@@ -1797,6 +1828,16 @@ export default function BookingPage() {
                 exit={{ scale: 0.9 }}
                 className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 text-center border border-gray-100"
               >
+
+                {/* 🆕 Email mismatch warning */}
+                {emailMismatch && (
+                  <div className="mb-4 p-3 bg-yellow-100 text-yellow-900 rounded-md text-sm leading-relaxed">
+                    This email doesn’t match what we have on file for you.
+                    If you recently changed your email, that’s fine.
+                    Otherwise please double-check for typos.
+                  </div>
+                )}
+
                 {!confirmed ? (
                   <>
                     <p className="mb-4 text-gray-700 font-medium">
