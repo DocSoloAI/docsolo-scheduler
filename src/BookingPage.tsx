@@ -746,38 +746,38 @@ export default function BookingPage() {
 
 
 
-  const handleConfirm = async () => {
+  const handleConfirm = async (): Promise<boolean> => {
     // ✅ Validation guard
     if (!firstName || !lastName || !email) {
       setFormError("First name, last name, email, and cell phone are required.");
-      return;
+      return false;
     }
 
     // ✅ NEW: Validate cell phone
     const cleanedPhone = cellPhone.replace(/\D/g, "");
     if (!cleanedPhone || cleanedPhone.length !== 10) {
       setFormError("Please provide a valid 10-digit phone number.");
-      return;
+      return false;
     }
 
     if (patientType === "new") {
       if (!birthday || birthday.length !== 10) {
         setFormError("Please provide a valid date of birth (MM/DD/YYYY).");
-        return;
+        return false;
       }
       
       const [mm, dd, yyyy] = birthday.split("/").map((n) => parseInt(n));
       const isValid = mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31 && yyyy > 1900 && yyyy <= new Date().getFullYear();
       if (!isValid) {
         setFormError("Please provide a valid date of birth.");
-        return;
+        return false;
       }
     }
 
     try {
       if (!providerId) {
         setFormError("Provider not found.");
-        return;
+        return false;
       }
 
       // 🧩 Idiot-proof service selection logic
@@ -787,12 +787,12 @@ export default function BookingPage() {
 
       if (matchingServices.length === 0) {
         setFormError("No services available for this type of appointment.");
-        return;
+        return false;
       }
 
       if (!selectedService && matchingServices.length > 1) {
         setFormError("Please select a specific service before continuing.");
-        return;
+        return false;
       }
 
       const service =
@@ -839,7 +839,7 @@ export default function BookingPage() {
             setSelectedDate(new Date(selectedDate));
           }, 100);
         }
-        return;
+        return false;
       }
       
       let appointmentId: string | null = null;
@@ -985,9 +985,12 @@ export default function BookingPage() {
       setBookingComplete(true);
       setManageToken(manageToken);
 
+      return true;
+
     } catch (err) {
       console.error("Booking error:", err);
       toast.error("Something went wrong booking your appointment.");
+      return false;
     }
   };
 
@@ -1774,7 +1777,6 @@ export default function BookingPage() {
                     >
                       {confirmed ? "Appointment Confirmed" : "Review & Continue"}
                     </Button>
-
                   </CardContent>
                 </Card>
               </motion.div>
@@ -1898,8 +1900,17 @@ export default function BookingPage() {
                     }`}
                     onClick={async () => {
                       if (confirming) return;
+
                       setConfirming(true);
-                      await handleConfirm(); 
+
+                      const result = await handleConfirm(); // we will return true/false from handleConfirm
+
+                      if (result) {
+                        // Success, close modal
+                        setShowConfirmModal(false);
+                      }
+
+                      // Do NOT reset confirming here
                     }}
                   >
                     {confirming ? "Confirming..." : "Confirm Appointment"}
