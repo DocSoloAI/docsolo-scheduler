@@ -99,8 +99,6 @@ export default function BookingPage() {
     }
   }, [rescheduleId]);
 
-
-
   useEffect(() => {
     document.title = `${providerOfficeName || "Booking"} – Appointment`;
   }, [providerOfficeName]);
@@ -195,6 +193,59 @@ export default function BookingPage() {
       ? "This email may be mistyped. Please double-check it."
       : "";
   };
+
+  // 🧠 Gentle mismatch detector for established patients
+  async function checkEmailMismatch() {
+    if (patientType !== "established") {
+      setEmailWarning("");
+      return true;
+    }
+
+    if (!providerId) return true;
+
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail) return true;
+
+    // Require basic identifying info
+    const fn = firstName.trim().toLowerCase();
+    const ln = lastName.trim().toLowerCase();
+    const phone = cellPhone.replace(/\D/g, "");
+    if (!fn || !ln || phone.length !== 10) return true;
+
+    const { data, error } = await supabase
+      .from("patients")
+      .select("email_lower, other_emails_lower")
+      .eq("provider_id", providerId)
+      .eq("first_name_lower", fn)
+      .eq("last_name_lower", ln)
+      .eq("cell_phone", cellPhone)
+      .limit(1)
+      .maybeSingle();
+
+    if (error || !data) {
+      setEmailWarning("");
+      return true;
+    }
+
+    const known = [
+      data.email_lower || "",
+      ...(data.other_emails_lower || [])
+    ].filter(Boolean);
+
+    // Already matches
+    if (known.includes(normalizedEmail)) {
+      setEmailWarning("");
+      return true;
+    }
+
+    // Soft mismatch warning
+    setEmailWarning(
+      "This email doesn't match the one we have on file. If you recently changed your email, that's fine. Otherwise please double-check."
+    );
+
+    return false;
+  }
+
 
   const [dobError, setDobError] = useState("");
   // 🆕 Unified form validation helper
@@ -1669,11 +1720,15 @@ export default function BookingPage() {
                           return;
                         }
 
-                        // Fast, instant typo detection
+                        // Fast local typo detection
                         const warning = detectEmailTypo(email);
-                        setEmailWarning(warning);  // only shows, does not block
+                        setEmailWarning(warning);
 
-                        setShowConfirmModal(true); // modal opens instantly
+                        // Quick Supabase mismatch check (new)
+                        await checkEmailMismatch();
+
+                        // Open confirmation modal
+                        setShowConfirmModal(true);
                       }}
 
                       disabled={
