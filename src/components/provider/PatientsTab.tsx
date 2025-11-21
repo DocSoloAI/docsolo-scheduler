@@ -444,6 +444,7 @@ const savePatient = async () => {
                           updated[idx] = e.target.value;
                           setForm({ ...form, other_emails: updated });
                         }}
+                        className="h-11 leading-normal"
                       />
                       <Button
                         variant="destructive"
