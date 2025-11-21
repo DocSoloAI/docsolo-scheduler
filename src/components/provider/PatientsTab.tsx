@@ -421,7 +421,9 @@ const savePatient = async () => {
                 onChange={(e) =>
                   setForm({ ...form, email: e.target.value })
                 }
+                className="h-11"
               />
+
               <p className="text-xs text-gray-500 mt-1">
                 This is the email used for confirmations and reminders.
               </p>
