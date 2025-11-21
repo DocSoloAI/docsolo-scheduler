@@ -994,7 +994,6 @@ export default function BookingPage() {
     }
   };
 
-
   const serviceDescription = services.find(s => s.default_for === patientType)?.description;
 
   // ✅ NEW: Show error state
@@ -1834,8 +1833,8 @@ export default function BookingPage() {
                 {/* 🆕 Email mismatch warning */}
                 {emailMismatch && (
                   <div className="mb-4 p-3 bg-yellow-100 text-yellow-900 rounded-md text-sm leading-relaxed">
-                    This email doesn’t match the one we have on file.
-                    Please double-check it for accuracy.
+                    <p>This email doesn’t match the one we have on file.</p>
+                    <p>Please double-check it for accuracy, or continue if you use this email as well.</p>
                   </div>
                 )}
 
