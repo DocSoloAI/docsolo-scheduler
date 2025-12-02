@@ -43,6 +43,8 @@ const HOLIDAYS = [
   { key: "independence_day", label: "Independence Day (Jul 4)" },
   { key: "labor_day", label: "Labor Day (1st Mon in Sep)" },
   { key: "thanksgiving", label: "Thanksgiving (4th Thu in Nov)" },
+  { key: "black_friday", label: "Day After Thanksgiving (Black Friday)" },
+  { key: "christmas_eve", label: "Christmas Eve (Dec 24)" },
   { key: "christmas", label: "Christmas Day (Dec 25)" },
 ];
 
@@ -138,11 +140,21 @@ function computeHolidayDates(key: string, startDate: Date, endDate: Date): Date[
       case "thanksgiving":
         pushIfInRange(nthWeekdayOfMonth(year, 10, 4, 4));
         break;
+      case "black_friday": {
+        const tg = nthWeekdayOfMonth(year, 10, 4, 4); // Thanksgiving
+        tg.setDate(tg.getDate() + 1); // next day
+        pushIfInRange(new Date(tg));
+        break;
+      }
+      case "christmas_eve":
+        pushIfInRange(new Date(year, 11, 24));
+        break;
       case "christmas":
         pushIfInRange(new Date(year, 11, 25));
         break;
     }
   }
+
   return dates;
 }
 
