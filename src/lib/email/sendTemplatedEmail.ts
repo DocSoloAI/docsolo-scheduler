@@ -4,8 +4,15 @@ interface AppointmentData {
   patientName: string;
   patientEmail?: string;
   patientPhone?: string;
+
+  // New appointment date/time
   date: string;
   time: string;
+
+  // Previous appointment date/time for update/reschedule emails
+  previousDate?: string;
+  previousTime?: string;
+
   service: string;
   appointmentId: string;
   manageLink: string;

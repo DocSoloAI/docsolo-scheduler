@@ -845,7 +845,26 @@ export default function BookingPage() {
       let appointmentId: string | null = null;
       let manageToken: string | null = null;
 
+      // 🕓 For reschedule/update emails: capture the original appointment time BEFORE overwriting it
+      let previousDate = "";
+      let previousTime = "";
+
       if (rescheduleId) {
+        // First fetch the existing appointment so we know what date/time is being changed
+        const { data: existingAppt, error: existingApptError } = await supabase
+          .from("appointments")
+          .select("start_time, manage_token")
+          .eq("id", rescheduleId)
+          .single();
+
+        if (existingApptError) throw existingApptError;
+
+        if (existingAppt?.start_time) {
+          const previousStartLocal = fromUTCToTZ(existingAppt.start_time, providerTimezone);
+          previousDate = format(previousStartLocal, "MMMM d, yyyy");
+          previousTime = format(previousStartLocal, "h:mm a");
+        }
+
         const { error: updateError } = await supabase
           .from("appointments")
           .update({
@@ -857,50 +876,44 @@ export default function BookingPage() {
           .eq("id", rescheduleId);
 
         if (updateError) throw updateError;
+
         appointmentId = rescheduleId;
+        manageToken = existingAppt?.manage_token ?? null;
+      } else {
+        // 🆕 Use helper for patient upsert + appointment insert
+        const newAppt = await upsertPatientAndCreateAppointment(
+          {
+            first_name: firstName,
+            last_name: lastName,
+            email: normalizedEmail,
+            cell_phone: cellPhone,
+            provider_id: providerId,
 
-        // 🔑 fetch manage_token for rescheduled appt
-        const { data: existing, error: tokenError } = await supabase
-          .from("appointments")
-          .select("manage_token")
-          .eq("id", rescheduleId)
-          .single();
-        if (tokenError) throw tokenError;
-        manageToken = existing?.manage_token ?? null;
-        } else {
-          // 🆕 Use helper for patient upsert + appointment insert
-          const newAppt = await upsertPatientAndCreateAppointment(
-            {
-              first_name: firstName,
-              last_name: lastName,
-              email: normalizedEmail,
-              cell_phone: cellPhone,
-              provider_id: providerId,
-
-              // ✅ New consent flags
-              allow_text: allowText,
-            },
-            {
-              service_id: serviceId,
-              start_time: fromTZToUTC(start, providerTimezone).toISOString(),
-              end_time: fromTZToUTC(end, providerTimezone).toISOString(),
-              status: "booked",
-              patient_note: comments || null,
-            }
-          );
-
-          appointmentId = newAppt.id;
-          manageToken = newAppt.manage_token; // ✅ capture token
-          let existingAllowText = newAppt.existingPatientAllowText;
-
-          // 🧠 If returning patient has never opted into text reminders, prompt once (after short delay)
-          if (existingAllowText === null) {
-            setTimeout(() => setShowTextOptIn(true), 2000); // 2.5s after confirmation UI
+            // ✅ New consent flags
+            allow_text: allowText,
+          },
+          {
+            service_id: serviceId,
+            start_time: fromTZToUTC(start, providerTimezone).toISOString(),
+            end_time: fromTZToUTC(end, providerTimezone).toISOString(),
+            status: "booked",
+            patient_note: comments || null,
           }
+        );
+
+        appointmentId = newAppt.id;
+        manageToken = newAppt.manage_token; // ✅ capture token
+        let existingAllowText = newAppt.existingPatientAllowText;
+
+        // 🧠 If returning patient has never opted into text reminders, prompt once
+        if (existingAllowText === null) {
+          setTimeout(() => setShowTextOptIn(true), 2000);
         }
+      }
 
-
-      if (!appointmentId || !manageToken) throw new Error("Appointment ID or token missing");
+      if (!appointmentId || !manageToken) {
+        throw new Error("Appointment ID or token missing");
+      }
 
       // 2. Emails
       const fullName = `${firstName} ${lastName}`;
@@ -915,11 +928,19 @@ export default function BookingPage() {
         appointmentData: {
           patientName: fullName,
           providerName: providerOfficeName || "Your Provider",
+
+          // New appointment date/time
           date: formattedDate,
           time: formattedTime,
+
+          // Previous appointment date/time, only populated during reschedule
+          previousDate,
+          previousTime,
+
           service: service.name,
           appointmentId,
-          manageLink: `https://${getSubdomain()}.${BOOKING_DOMAIN}/manage/${appointmentId}?token=${manageToken}`,          location: [providerStreet, providerCity, providerState, providerZip]
+          manageLink: `https://${getSubdomain()}.${BOOKING_DOMAIN}/manage/${appointmentId}?token=${manageToken}`,
+          location: [providerStreet, providerCity, providerState, providerZip]
             .filter(Boolean)
             .join(", "),
           officeName: providerOfficeName,
@@ -942,7 +963,10 @@ export default function BookingPage() {
           secondaryInsurance,
           secondaryID,
           patientNote: comments,
+          previousDate,
+          previousTime,
         });
+
         await sendTemplatedEmail({
           templateType: rescheduleId
             ? "provider_update"
@@ -953,8 +977,15 @@ export default function BookingPage() {
             patientName: fullName,
             patientEmail: normalizedEmail,
             patientPhone: cellPhone || "(no phone provided)",
+
+            // New appointment date/time
             date: formattedDate,
             time: formattedTime,
+
+            // Previous appointment date/time, only populated during reschedule
+            previousDate,
+            previousTime,
+
             service: service.name,
             appointmentId,
             patientNote: comments || "",
@@ -977,7 +1008,6 @@ export default function BookingPage() {
           },
         });
       }
-
 
       // 3. Mark confirmed
       setAppointmentId(appointmentId);

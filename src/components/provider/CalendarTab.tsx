@@ -46,11 +46,16 @@ import { fromUTCToTZ, fromTZToUTC, formatInTZ } from "@/utils/timezone";
 async function sendDualEmail(
   templateType: "confirmation" | "update" | "cancellation" | "reminder",
   providerId: string,
-  appointment: any
+  appointment: any,
+  previousAppointment?: {
+    previousDate?: string;
+    previousTime?: string;
+  }
 ) {
   const patient = Array.isArray(appointment.patients)
     ? appointment.patients[0]
     : appointment.patients;
+
   const service = Array.isArray(appointment.services)
     ? appointment.services[0]
     : appointment.services;
@@ -58,7 +63,7 @@ async function sendDualEmail(
   const { data: provider, error: provError } = await supabase
     .from("providers")
     .select(
-      "first_name, last_name, office_name, phone, street, city, state, zip, email"
+      "first_name, last_name, office_name, phone, street, city, state, zip, email, subdomain"
     )
     .eq("id", providerId)
     .single();
@@ -71,14 +76,29 @@ async function sendDualEmail(
     patientName: `${patient?.first_name || ""} ${patient?.last_name || ""}`,
     patientEmail: patient?.email || "",
     patientPhone: patient?.cell_phone || "",
-    date: new Date(appointment.start_time).toLocaleDateString(),
-    time: new Date(appointment.start_time).toLocaleTimeString([], {
-      hour: "2-digit",
+
+    // New appointment date/time
+    date: new Date(appointment.start_time).toLocaleDateString("en-US", {
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    }),
+    time: new Date(appointment.start_time).toLocaleTimeString("en-US", {
+      hour: "numeric",
       minute: "2-digit",
     }),
+
+    // Previous appointment date/time for update emails
+    previousDate: previousAppointment?.previousDate || "",
+    previousTime: previousAppointment?.previousTime || "",
+
     service: service?.name || "",
     appointmentId: appointment.id,
-    manageLink: `https://${providerId}.bookthevisit.com/manage/${appointment.id}`,
+    manageLink:
+      provider?.subdomain && appointment?.manage_token
+        ? `https://${provider.subdomain}.bookthevisit.com/manage/${appointment.id}?token=${appointment.manage_token}`
+        : "",
+
     officeName: provider?.office_name || "",
     providerName: provider?.first_name
       ? `${provider.first_name} ${provider.last_name}`
@@ -824,14 +844,33 @@ async function loadAvailabilityOverrides() {
             })
             .eq("id", info.event.id)
             .select(
-              "id, start_time, patients(first_name,last_name,email), services(name)"
+              "id, start_time, manage_token, patients(first_name,last_name,email,cell_phone), services(name)"              
             )
             .single();
 
           if (error) throw error;
 
           await safeReload();
-          if (updated) await sendDualEmail("update", providerId, updated);
+          if (updated) {
+            const previousDate = info.oldEvent.start
+              ? new Date(info.oldEvent.start).toLocaleDateString("en-US", {
+                  month: "long",
+                  day: "numeric",
+                  year: "numeric",
+                })
+              : "";
+
+            const previousTime = info.oldEvent.start
+              ? new Date(info.oldEvent.start).toLocaleTimeString("en-US", {
+                  hour: "numeric",
+                  minute: "2-digit",
+                })
+              : "";
+            await sendDualEmail("update", providerId, updated, {
+              previousDate,
+              previousTime,
+            });
+          }
           toast.success("Appointment moved ✅");
         } catch (err: any) {
           console.error("❌ Error updating event:", err.message);
@@ -890,14 +929,34 @@ async function loadAvailabilityOverrides() {
             })
             .eq("id", info.event.id)
             .select(
-              "id, start_time, patients(first_name,last_name,email), services(name)"
+              "id, start_time, manage_token, patients(first_name,last_name,email,cell_phone), services(name)"              
             )
             .single();
 
           if (error) throw error;
 
           await safeReload();
-          if (updated) await sendDualEmail("update", providerId, updated);
+          if (updated) {
+            const previousDate = info.oldEvent.start
+              ? new Date(info.oldEvent.start).toLocaleDateString("en-US", {
+                  month: "long",
+                  day: "numeric",
+                  year: "numeric",
+                })
+              : "";
+
+            const previousTime = info.oldEvent.start
+              ? new Date(info.oldEvent.start).toLocaleTimeString("en-US", {
+                  hour: "numeric",
+                  minute: "2-digit",
+                })
+              : "";
+
+            await sendDualEmail("update", providerId, updated, {
+              previousDate,
+              previousTime,
+            });
+          }          
           toast.success("Appointment resized ✅");
         } catch (err: any) {
           console.error("❌ Error resizing event:", err.message);
@@ -969,14 +1028,36 @@ async function loadAvailabilityOverrides() {
             service_id: selectedService,
           })
           .eq("id", editingEvent.id)
-          .select("id, start_time, patients(first_name,last_name,email), services(name)")
+          .select(
+            "id, start_time, manage_token, patients(first_name,last_name,email,cell_phone), services(name)"
+          )          
           .single();
 
         if (error) throw error;
 
         await safeReload();
         resetForm();
-        if (updated) await sendDualEmail("update", providerId, updated);
+        if (updated) {
+          const previousDate = editingEvent.start
+            ? new Date(editingEvent.start).toLocaleDateString("en-US", {
+                month: "long",
+                day: "numeric",
+                year: "numeric",
+              })
+            : "";
+
+          const previousTime = editingEvent.start
+            ? new Date(editingEvent.start).toLocaleTimeString("en-US", {
+                hour: "numeric",
+                minute: "2-digit",
+              })
+            : "";
+
+          await sendDualEmail("update", providerId, updated, {
+            previousDate,
+            previousTime,
+          });
+        }        
         setSaving(false);
         return;
       }

@@ -143,6 +143,8 @@ export function defaultTemplates(providerId: string) {
 
   {{announcement}}
 
+  Previous date/time: {{previousDate}} at {{previousTime}}
+
   New date/time: {{date}} at {{time}}
 
   Location: {{location}}
@@ -165,7 +167,13 @@ export function defaultTemplates(providerId: string) {
             </p>
           {{/if}}
 
-          <p style="font-size:1rem; font-weight:600; margin:1em 0 1.5em;">
+          <div style="background:#f9fafb; border:1px solid #e5e7eb; border-radius:8px; padding:14px 16px; margin:1em 0 1.25em;">
+            <p style="margin:0 0 0.35em; font-size:0.85rem; color:#6b7280;">Previous appointment:</p>
+            <p style="margin:0; font-size:0.95rem; color:#374151;">{{previousDate}} at {{previousTime}}</p>
+          </div>
+
+          <p style="margin:0 0 0.35em; font-size:0.85rem; color:#6b7280;">New appointment:</p>
+          <p style="font-size:1rem; font-weight:600; margin:0 0 1.5em;">
             {{date}} at {{time}}
           </p>
 
@@ -336,34 +344,42 @@ export function defaultTemplates(providerId: string) {
         </div>
       `,
     },
+    // 🟡 PROVIDER UPDATE
     {
       provider_id: providerId,
       template_type: "provider_update",
       subject: "[Updated Appointment] {{patientName}} – {{date}} at {{time}}",
-      body: `
-    Updated Appointment
-    Patient: {{patientName}}
-    Email: {{patientEmail}}
-    Phone: {{patientPhone}}
-    Service: {{service}}
-    New Date/Time: {{date}} at {{time}}
-    {{#if patientNote}}Notes from patient: "{{patientNote}}"{{/if}}
-    Appointment ID: {{appointmentId}}
-      `,
+      body: `Updated Appointment
+Patient: {{patientName}}
+Email: {{patientEmail}}
+Phone: {{patientPhone}}
+Service: {{service}}
+Previous Date/Time: {{previousDate}} at {{previousTime}}
+New Date/Time: {{date}} at {{time}}
+{{#if patientNote}}Notes from patient: "{{patientNote}}"{{/if}}
+Appointment ID: {{appointmentId}}`,
       html_body: `
         <div style="font-family: system-ui, sans-serif; max-width:600px; margin:auto; color:#111;">
-          <h2 style="font-size:1rem; font-weight:600; color:#f59e0b; margin-bottom:1em;">Updated Appointment</h2>
+          <h2 style="font-size:1rem; font-weight:600; color:#f59e0b; margin-bottom:1em;">
+            Updated Appointment
+          </h2>
+
           <p><strong>Patient:</strong> {{patientName}}</p>
           <p><strong>Email:</strong> {{patientEmail}}</p>
           <p><strong>Phone:</strong> {{patientPhone}}</p>
           <p><strong>Service:</strong> {{service}}</p>
+          <p><strong>Previous Date/Time:</strong> {{previousDate}} at {{previousTime}}</p>
           <p><strong>New Date/Time:</strong> {{date}} at {{time}}</p>
+
           {{#if patientNote}}
             <p style="background:#fef3c7; color:#92400e; padding:10px 12px; border-radius:6px; margin-top:1em; font-size:0.9rem;">
               <strong>Patient Note:</strong> "{{patientNote}}"
             </p>
           {{/if}}
-          <p style="margin-top:1.5em; font-size:0.8rem; color:#777;">Appointment ID: {{appointmentId}}</p>
+
+          <p style="margin-top:1.5em; font-size:0.8rem; color:#777;">
+            Appointment ID: {{appointmentId}}
+          </p>
         </div>
       `,
     },
