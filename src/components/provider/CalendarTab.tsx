@@ -1235,20 +1235,21 @@ async function loadAvailabilityOverrides() {
         return;
       }
 
-      // 🩵 5️⃣ CREATE new appointment (fixed local-time handling)
+      // 🩵 5️⃣ CREATE new appointment
       const { data: newAppt, error: apptErr } = await supabase
         .from("appointments")
         .insert([
           {
             provider_id: providerId,
-            start_time: fromTZToUTC(start, providerTimezone).toISOString(), // ✅ NEW
-            end_time: fromTZToUTC(end, providerTimezone).toISOString(),     // ✅ NEW            status: "booked",
+            start_time: fromTZToUTC(start, providerTimezone).toISOString(),
+            end_time: fromTZToUTC(appointmentEnd, providerTimezone).toISOString(),
+            status: "booked",
             patient_id: selectedPatient,
             service_id: selectedService,
           },
         ])
         .select(
-          "id, start_time, patients(first_name,last_name,email), services(name)"
+          "id, start_time, manage_token, patients(first_name,last_name,email,cell_phone), services(name)"
         )
         .single();
 
