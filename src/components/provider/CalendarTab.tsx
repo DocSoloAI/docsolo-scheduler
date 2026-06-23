@@ -195,7 +195,32 @@ export default function CalendarTab({ providerId }: { providerId: string }) {
 
   // 🧠 Helper to mark form as dirty on any change
   const markDirty = () => setIsDirty(true);
-  
+
+  const hasAppointmentChanges = () => {
+    if (!editingEvent || isTimeOff || !selectedDate) return true;
+
+    const originalStart = new Date(editingEvent.start).getTime();
+    const currentStart = new Date(selectedDate).getTime();
+
+    const originalDuration =
+      editingEvent.start && editingEvent.end
+        ? Math.round(
+            (new Date(editingEvent.end).getTime() -
+              new Date(editingEvent.start).getTime()) /
+              60000
+          )
+        : duration;
+
+    const currentDuration = Number(duration);
+
+    return (
+      originalStart !== currentStart ||
+      String(editingEvent.patient_id || "") !== String(selectedPatient || "") ||
+      String(editingEvent.service_id || "") !== String(selectedService || "") ||
+      originalDuration !== currentDuration
+    );
+  };
+
   const safeReload = async () => {
     await reload();
   };
@@ -257,6 +282,7 @@ export default function CalendarTab({ providerId }: { providerId: string }) {
   const [isAvailability, setIsAvailability] = useState(false);
 
   const [saving, setSaving] = useState(false);
+  const [sendUpdateEmail, setSendUpdateEmail] = useState(true);
   const [seriesDeleteOpen, setSeriesDeleteOpen] = useState(false);
   const [pendingGroupId, setPendingGroupId] = useState<string | null>(null);
   const calendarRef = useRef<any>(null);
@@ -652,6 +678,7 @@ async function loadAvailabilityOverrides() {
     setDuration(30);
     setIsTimeOff(false);
     setIsAvailability(false);
+    setSendUpdateEmail(true);
 
     // 🧩 Reset repeating + time-off fields
     setIsRepeating(false);
@@ -1042,7 +1069,7 @@ async function loadAvailabilityOverrides() {
 
         await safeReload();
         resetForm();
-        if (updated) {
+        if (updated && sendUpdateEmail) {
           const previousDate = editingEvent.start
             ? new Date(editingEvent.start).toLocaleDateString("en-US", {
                 month: "long",
@@ -1062,7 +1089,7 @@ async function loadAvailabilityOverrides() {
             previousDate,
             previousTime,
           });
-        }        
+        }       
         setSaving(false);
         return;
       }
@@ -2320,6 +2347,22 @@ if (loading) return <div className="p-4 text-gray-500">Loading calendar…</div>
 
           {/* ===== Fixed Footer ===== */}
           <div className="shrink-0 border-t border-gray-200 px-6 py-4 bg-white">
+            {editingEvent && !isTimeOff && (
+              <div className="flex justify-end mb-3">
+                <label className="flex items-center gap-2 text-sm text-gray-600">
+                  <input
+                    type="checkbox"
+                    checked={sendUpdateEmail}
+                    onChange={(e) => {
+                      setSendUpdateEmail(e.target.checked);
+                    }}
+                    className="h-4 w-4 rounded border-gray-300 text-blue-600"
+                  />
+                  Send email for this appointment change
+                </label>
+              </div>
+            )}
+
             <div className="flex justify-between items-center">
               {/* Left: Cancel/Delete */}
               {editingEvent && !isTimeOff && (
@@ -2377,7 +2420,6 @@ if (loading) return <div className="p-4 text-gray-500">Loading calendar…</div>
                 </Button>
               )}
 
-
               {/* Right: Close/Save */}
               <div className="flex justify-end gap-2 ml-auto">
                 <Button
@@ -2392,7 +2434,14 @@ if (loading) return <div className="p-4 text-gray-500">Loading calendar…</div>
                 >
                   Close
                 </Button>
-                <Button onClick={handleSave} disabled={saving}>
+                <Button
+                  onClick={handleSave}
+                  disabled={
+                    saving ||
+                    (editingEvent && !isTimeOff && !hasAppointmentChanges()) ||
+                    (editingEvent && isTimeOff && !isDirty)
+                  }
+                >
                   {saving ? "Saving..." : "Save Changes"}
                 </Button>
               </div>
