@@ -970,13 +970,18 @@ async function loadAvailabilityOverrides() {
     if (!selectedDate) return;
     setSaving(true);
 
-    const start = selectedDate instanceof Date ? selectedDate : new Date(selectedDate);
-    const svc = services.find((s) => String(s.id) === String(selectedService));
-    const svcDuration = svc?.duration_minutes ?? duration;
-    const end =
-      endDate instanceof Date
-        ? endDate
-        : new Date(endDate || start.getTime() + svcDuration * 60000);
+  const start = selectedDate instanceof Date ? selectedDate : new Date(selectedDate);
+  const svc = services.find((s) => String(s.id) === String(selectedService));
+  const svcDuration = svc?.duration_minutes ?? duration;
+
+  // Used for time off / availability blocks, where the user may choose a custom end time.
+  const end =
+    endDate instanceof Date
+      ? endDate
+      : new Date(endDate || start.getTime() + svcDuration * 60000);
+
+  // Used for patient appointments, where the end time should follow the selected service duration.
+  const appointmentEnd = new Date(start.getTime() + svcDuration * 60000);
 
     try {
       // 🧩 1️⃣ UPDATE existing appointment or time off
@@ -1022,7 +1027,7 @@ async function loadAvailabilityOverrides() {
           .from("appointments")
           .update({
             start_time: fromTZToUTC(start, providerTimezone).toISOString(), // ✅ NEW
-            end_time: fromTZToUTC(end, providerTimezone).toISOString(),     // ✅ NEW
+            end_time: fromTZToUTC(appointmentEnd, providerTimezone).toISOString(),            
             status: "booked",
             patient_id: selectedPatient,
             service_id: selectedService,
