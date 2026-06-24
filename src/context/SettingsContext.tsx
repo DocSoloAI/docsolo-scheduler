@@ -11,13 +11,17 @@ interface SettingsContextType {
   reload: () => void;
 }
 
-const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
+const SettingsContext = createContext<SettingsContextType | undefined>(
+  undefined
+);
 
 export function SettingsProvider({
   providerId,
+  includePrivateData = false,
   children,
 }: {
   providerId: string;
+  includePrivateData?: boolean;
   children: React.ReactNode;
 }) {
   const [services, setServices] = useState<any[]>([]);
@@ -29,47 +33,59 @@ export function SettingsProvider({
   const loadAll = async () => {
     setLoading(true);
 
-  const [svcRes, availRes, patRes, apptRes] = await Promise.all([
-    supabase
-      .from("services")
-      .select("id, provider_id, name, description, duration_minutes, is_active, default_for, color")
-      .eq("provider_id", providerId),
+    const [svcRes, availRes] = await Promise.all([
+      supabase
+        .from("services")
+        .select(
+          "id, provider_id, name, description, duration_minutes, is_active, default_for, color"
+        )
+        .eq("provider_id", providerId),
 
-    supabase
-      .from("availability")
-      .select("*")
-      .eq("provider_id", providerId),
-
-    // ✅ Added cell_phone here
-    supabase.from("patients").select("id, first_name, last_name, email, cell_phone"),
-
-    supabase
-      .from("appointments")
-      .select(
-        `
-        id,
-        start_time,
-        end_time,
-        service_id,
-        patient_id,
-        status,
-        patients:patient_id (first_name, last_name)
-      `
-      )
-      .eq("provider_id", providerId),
-  ]);
+      supabase
+        .from("availability")
+        .select("*")
+        .eq("provider_id", providerId),
+    ]);
 
     if (svcRes.data) setServices(svcRes.data);
     if (availRes.data) setAvailability(availRes.data);
-    if (patRes.data) setPatients(patRes.data);
-    if (apptRes.data) setAppointments(apptRes.data);
+
+    if (includePrivateData) {
+      const [patRes, apptRes] = await Promise.all([
+        supabase
+          .from("patients")
+          .select("id, first_name, last_name, email, cell_phone")
+          .eq("provider_id", providerId),
+
+        supabase
+          .from("appointments")
+          .select(
+            `
+            id,
+            start_time,
+            end_time,
+            service_id,
+            patient_id,
+            status,
+            patients:patient_id (first_name, last_name)
+          `
+          )
+          .eq("provider_id", providerId),
+      ]);
+
+      if (patRes.data) setPatients(patRes.data);
+      if (apptRes.data) setAppointments(apptRes.data);
+    } else {
+      setPatients([]);
+      setAppointments([]);
+    }
 
     setLoading(false);
   };
 
   useEffect(() => {
     loadAll();
-  }, [providerId]);
+  }, [providerId, includePrivateData]);
 
   return (
     <SettingsContext.Provider

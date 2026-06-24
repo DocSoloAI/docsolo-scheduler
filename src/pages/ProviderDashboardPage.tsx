@@ -136,7 +136,7 @@ export default function ProviderSettingsPage() {
       <Card>
         {/* ✅ overflow-x-hidden prevents micro width reflows when modals open */}
         <CardContent className="p-6 min-h-[600px] overflow-x-hidden">
-          <SettingsProvider providerId={providerId}>
+          <SettingsProvider providerId={providerId} includePrivateData>
             <Tabs
               value={activeTab}
               onValueChange={(nextTab) => {
