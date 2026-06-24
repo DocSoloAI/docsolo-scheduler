@@ -2358,7 +2358,7 @@ if (loading) return <div className="p-4 text-gray-500">Loading calendar…</div>
                     }}
                     className="h-4 w-4 rounded border-gray-300 text-blue-600"
                   />
-                  Send email for this appointment change
+                  Send patient and provider emails for this appointment change
                 </label>
               </div>
             )}
