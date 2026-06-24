@@ -1,5 +1,6 @@
 // src/components/auth/SignUpForm.tsx
 import { useState } from "react";
+import { Eye, EyeOff } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { defaultTemplates } from "@/lib/defaultTemplates";
 
@@ -28,11 +29,16 @@ export default function SignUpForm() {
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
+  const requiredMark = <span className="text-red-500">*</span>;
+
   const formatPhone = (value: string) => {
     const digits = value.replace(/\D/g, "");
     const match = digits.match(/^(\d{0,3})(\d{0,3})(\d{0,4})$/);
     if (!match) return value;
-    return [match[1], match[2], match[3]].filter(Boolean).join("-").substring(0, 12);
+    return [match[1], match[2], match[3]]
+      .filter(Boolean)
+      .join("-")
+      .substring(0, 12);
   };
 
   const handleSignUp = async (e: React.FormEvent) => {
@@ -138,31 +144,80 @@ export default function SignUpForm() {
         Create Your Free Account
       </h2>
 
-      {error && <div className="bg-red-100 text-red-600 p-2 rounded mb-4">{error}</div>}
+      {error && (
+        <div className="bg-red-100 text-red-600 p-2 rounded mb-4">
+          {error}
+        </div>
+      )}
+
       {successMessage && (
-        <div className="bg-green-100 text-green-700 p-2 rounded mb-4">{successMessage}</div>
+        <div className="bg-green-100 text-green-700 p-2 rounded mb-4">
+          {successMessage}
+        </div>
       )}
 
       {!successMessage && (
         <form onSubmit={handleSignUp} className="space-y-4">
           {/* Provider name */}
-          <div className="flex gap-2">
-            <input className="w-1/2 p-2 border rounded" placeholder="First Name" required
-              value={firstName} onChange={(e) => setFirstName(e.target.value)} />
-            <input className="w-1/2 p-2 border rounded" placeholder="Last Name" required
-              value={lastName} onChange={(e) => setLastName(e.target.value)} />
-          </div>
-          <input className="w-full p-2 border rounded" placeholder="Suffix (DC, MD, DPT)"
-            value={suffix} onChange={(e) => setSuffix(e.target.value)} />
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-sm font-medium mb-1 text-gray-700">
+                First Name {requiredMark}
+              </label>
+              <input
+                className="w-full p-2 border rounded"
+                placeholder="First Name"
+                required
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+              />
+            </div>
 
-          <input className="w-full p-2 border rounded" placeholder="Office Name" required
-            value={officeName} onChange={(e) => setOfficeName(e.target.value)} />
+            <div>
+              <label className="block text-sm font-medium mb-1 text-gray-700">
+                Last Name {requiredMark}
+              </label>
+              <input
+                className="w-full p-2 border rounded"
+                placeholder="Last Name"
+                required
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1 text-gray-700">
+              Suffix
+            </label>
+            <input
+              className="w-full p-2 border rounded"
+              placeholder="DC, MD, DPT"
+              value={suffix}
+              onChange={(e) => setSuffix(e.target.value)}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1 text-gray-700">
+              Office Name {requiredMark}
+            </label>
+            <input
+              className="w-full p-2 border rounded"
+              placeholder="Office Name"
+              required
+              value={officeName}
+              onChange={(e) => setOfficeName(e.target.value)}
+            />
+          </div>
 
           {/* Subdomain */}
-          <div className="mb-3">
+          <div>
             <label className="block text-sm font-medium mb-1 text-gray-700">
-              Pick your custom website link <span className="text-red-500">*</span>
+              Pick your custom website link {requiredMark}
             </label>
+
             <div className="flex">
               <input
                 className="flex-1 p-2 border rounded-l"
@@ -175,41 +230,134 @@ export default function SignUpForm() {
                 .bookthevisit.com
               </span>
             </div>
-            <p className="text-xs text-gray-500 mt-1">
-              This will be your patient booking link. <br />
-              Example: enter <span className="font-mono text-blue-600">drjones</span> →{" "}
-              <span className="font-mono text-blue-600">drjones.bookthevisit.com</span>
+
+            <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2">
+              <p className="text-xs text-amber-800 leading-relaxed">
+                <span className="font-semibold">
+                  Choose carefully — your subdomain cannot be changed after signup.
+                </span>
+                <br />
+                This will be your patient booking link.
+              </p>
+            </div>
+
+            <p className="text-xs text-gray-500 mt-1 leading-relaxed">
+              Example: enter{" "}
+              <span className="font-mono text-blue-600">drjones</span> →{" "}
+              <span className="font-mono text-blue-600">
+                drjones.bookthevisit.com
+              </span>
             </p>
           </div>
 
           {/* Auth */}
-          <input className="w-full p-2 border rounded" type="email" placeholder="Email" required
-            value={email} onChange={(e) => setEmail(e.target.value)} />
-          <div className="relative">
-            <input className="w-full p-2 border rounded pr-10" type={showPassword ? "text" : "password"}
-              placeholder="Password" required value={password} onChange={(e) => setPassword(e.target.value)} />
-            <button type="button" onClick={() => setShowPassword(!showPassword)}
-              className="absolute inset-y-0 right-0 flex items-center px-3 text-gray-500">
-              {showPassword ? "🙈" : "👁"}
-            </button>
+          <div>
+            <label className="block text-sm font-medium mb-1 text-gray-700">
+              Email {requiredMark}
+            </label>
+            <input
+              className="w-full p-2 border rounded"
+              type="email"
+              placeholder="Email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1 text-gray-700">
+              Password {requiredMark}
+            </label>
+            <div className="relative">
+              <input
+                className="w-full p-2 border rounded pr-10"
+                type={showPassword ? "text" : "password"}
+                placeholder="Password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                aria-label={showPassword ? "Hide password" : "Show password"}
+                className="absolute inset-y-0 right-0 flex items-center px-3 text-gray-400 hover:text-gray-700 transition"
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
           </div>
 
           {/* Phone + Address */}
-          <input className="w-full p-2 border rounded" placeholder="Phone"
-            value={phone} onChange={(e) => setPhone(formatPhone(e.target.value))} />
-          <input className="w-full p-2 border rounded" placeholder="Street"
-            value={street} onChange={(e) => setStreet(e.target.value)} />
-          <div className="flex gap-2">
-            <input className="w-1/2 p-2 border rounded" placeholder="City"
-              value={city} onChange={(e) => setCity(e.target.value)} />
-            <input className="w-1/4 p-2 border rounded" placeholder="State" maxLength={2}
-              value={state} onChange={(e) => setState(e.target.value.toUpperCase())} />
-            <input className="w-1/4 p-2 border rounded" placeholder="Zip"
-              value={zip} onChange={(e) => setZip(e.target.value)} />
+          <div>
+            <label className="block text-sm font-medium mb-1 text-gray-700">
+              Phone
+            </label>
+            <input
+              className="w-full p-2 border rounded"
+              placeholder="Phone"
+              value={phone}
+              onChange={(e) => setPhone(formatPhone(e.target.value))}
+            />
           </div>
 
-          <button type="submit" disabled={loading}
-            className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 transition">
+          <div>
+            <label className="block text-sm font-medium mb-1 text-gray-700">
+              Street
+            </label>
+            <input
+              className="w-full p-2 border rounded"
+              placeholder="Street"
+              value={street}
+              onChange={(e) => setStreet(e.target.value)}
+            />
+          </div>
+
+          <div className="grid grid-cols-4 gap-2">
+            <div className="col-span-2">
+              <label className="block text-sm font-medium mb-1 text-gray-700">
+                City
+              </label>
+              <input
+                className="w-full p-2 border rounded"
+                placeholder="City"
+                value={city}
+                onChange={(e) => setCity(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1 text-gray-700">
+                State
+              </label>
+              <input
+                className="w-full p-2 border rounded"
+                placeholder="State"
+                maxLength={2}
+                value={state}
+                onChange={(e) => setState(e.target.value.toUpperCase())}
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1 text-gray-700">
+                Zip
+              </label>
+              <input
+                className="w-full p-2 border rounded"
+                placeholder="Zip"
+                value={zip}
+                onChange={(e) => setZip(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 transition disabled:bg-blue-300 disabled:cursor-not-allowed"
+          >
             {loading ? "Creating..." : "Sign Up"}
           </button>
         </form>
