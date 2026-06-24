@@ -194,39 +194,6 @@ export default function BookingPage() {
       : "";
   };
 
-  // 🧠 Fuzzy patient recognition
-  function namesAreClose(a: string, b: string): boolean {
-    if (!a || !b) return false;
-    const aa = a.toLowerCase();
-    const bb = b.toLowerCase();
-    if (aa === bb) return true;
-    return levenshteinDistance(aa, bb) <= 2; // small threshold
-  }
-
-  function levenshteinDistance(a: string, b: string): number {
-    const m = a.length;
-    const n = b.length;
-    const dp: number[][] = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
-
-    for (let i = 0; i <= m; i++) dp[i][0] = i;
-    for (let j = 0; j <= n; j++) dp[0][j] = j;
-
-    for (let i = 1; i <= m; i++) {
-      for (let j = 1; j <= n; j++) {
-        if (a[i - 1] === b[j - 1]) {
-          dp[i][j] = dp[i - 1][j - 1];
-        } else {
-          dp[i][j] = Math.min(
-            dp[i - 1][j] + 1,     // deletion
-            dp[i][j - 1] + 1,     // insertion
-            dp[i - 1][j - 1] + 1  // substitution
-          );
-        }
-      }
-    }
-    return dp[m][n];
-  }
-
   const [dobError, setDobError] = useState("");
   // 🆕 Unified form validation helper
   const isFormValid = () => {
@@ -728,42 +695,31 @@ export default function BookingPage() {
     const phone = cellPhone.replace(/\D/g, "");
     const enteredEmail = email.trim().toLowerCase();
 
-    if (!fn || !ln || phone.length !== 10) {
-      return false; // not enough info to match
-    }
-
-    // Look up patients with the same last name + phone
-    const { data, error } = await supabase
-      .from("patients")
-      .select("first_name, last_name, email_lower, other_emails_lower")
-      .eq("provider_id", providerId)
-      .eq("last_name_lower", ln.toLowerCase())
-      .eq("cell_phone", cellPhone)
-      .limit(5);
-
-    if (error || !data || data.length === 0) return false;
-
-    // Find best fuzzy match on first name
-    const matches = data.filter((p: any) =>
-      namesAreClose(p.first_name, fn)
-    );
-
-    if (matches.length === 0) return false;
-
-    // We assume the first is correct
-    const patient = matches[0];
-    const knownEmails = [
-      ...(patient.email_lower ? [patient.email_lower] : []),
-      ...(Array.isArray(patient.other_emails_lower) ? patient.other_emails_lower : [])
-    ];
-
-    // If email is already on file — no warning
-    if (knownEmails.includes(enteredEmail)) {
+    if (!fn || !ln || phone.length !== 10 || !enteredEmail) {
       return false;
     }
 
-    // Otherwise mismatch
-    return true;
+    const { data, error } = await supabase.functions.invoke("checkEmailMismatch", {
+      body: {
+        providerId,
+        firstName: fn,
+        lastName: ln,
+        cellPhone,
+        email: enteredEmail,
+      },
+    });
+
+    if (error) {
+      console.error("❌ checkEmailMismatch function error:", error);
+      return false;
+    }
+
+    if (data?.error) {
+      console.error("❌ checkEmailMismatch error:", data.error);
+      return false;
+    }
+
+    return data?.mismatch === true;
   }
 
 
