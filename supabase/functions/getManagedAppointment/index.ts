@@ -48,9 +48,33 @@ serve(async (req: Request) => {
         id,
         status,
         start_time,
-        patients ( first_name, last_name ),
-        providers ( office_name, street, city, state, zip, phone, email, id ),
-        services ( name )
+        service_id,
+        patients (
+          first_name,
+          last_name,
+          email,
+          cell_phone,
+          home_phone,
+          birthday,
+          street,
+          city,
+          state,
+          zip
+        ),
+        providers (
+          office_name,
+          street,
+          city,
+          state,
+          zip,
+          phone,
+          email,
+          id
+        ),
+        services (
+          name,
+          default_for
+        )
       `
       )
       .eq("id", appointmentId)

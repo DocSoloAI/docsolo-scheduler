@@ -640,76 +640,84 @@ export default function BookingPage() {
   // Prefill patient info if rescheduling
   useEffect(() => {
     const loadRescheduleData = async () => {
-      if (!rescheduleId || !providerId || rescheduleLoaded) return;
+      if (!rescheduleId || !token || !providerId || rescheduleLoaded) return;
 
-      const { data, error } = await supabase
-        .from("appointments")
-        .select(`
-          id,
-          service_id,
-          start_time,
-          patients (
-            first_name,
-            last_name,
-            email,
-            cell_phone,
-            home_phone,
-            birthday,
-            street,
-            city,
-            state,
-            zip
-          ),
-          services ( name, default_for )
-        `)
-        .eq("id", rescheduleId)
-        .single();
+      const { data, error } = await supabase.functions.invoke(
+        "getManagedAppointment",
+        {
+          body: {
+            appointmentId: rescheduleId,
+            manageToken: token,
+          },
+        }
+      );
 
-      if (error || !data) {
-        console.error("Error loading reschedule data:", error);
+      if (error) {
+        console.error("Error loading reschedule data:", error.message);
         return;
       }
 
-      // 🆕 Save appointment so we can show it in the header
-      const svc = Array.isArray(data.services) ? data.services[0] : data.services;
-      const patientObj = Array.isArray(data.patients) ? data.patients[0] : data.patients;
+      if (data?.error) {
+        console.error("Error loading reschedule data:", data.error);
+        return;
+      }
+
+      const managedAppointment = data?.appointment;
+
+      if (!managedAppointment) {
+        console.error("Error loading reschedule data: no appointment returned");
+        return;
+      }
+
+      const svc = Array.isArray(managedAppointment.services)
+        ? managedAppointment.services[0]
+        : managedAppointment.services;
+
+      const patientObj = Array.isArray(managedAppointment.patients)
+        ? managedAppointment.patients[0]
+        : managedAppointment.patients;
 
       setRescheduleAppt({
         patientName: patientObj
-          ? patientObj.first_name + " " + patientObj.last_name
+          ? `${patientObj.first_name} ${patientObj.last_name}`
           : "",
-        date: new Date(data.start_time),
+        date: new Date(managedAppointment.start_time),
         serviceName: svc?.name || "",
-        patient: patientObj
+        patient: patientObj,
       });
 
-      // 🆕 Force correct patient type based on service
+      // Force correct service + patient type for hidden reschedule service
+      if (managedAppointment.service_id) {
+        setSelectedService(managedAppointment.service_id);
+      }
+
       if (svc?.default_for) {
         setPatientType(svc.default_for as "new" | "established");
       }
 
-      // 🆕 Pre-fill patient fields
-      const p = data.patients?.[0];
-      if (p) {
-        setFirstName(p.first_name || "");
-        setLastName(p.last_name || "");
-        setEmail(p.email || "");
-        setCellPhone(p.cell_phone || "");
-        setHomePhone(p.home_phone || "");
+      // Pre-fill patient fields
+      if (patientObj) {
+        setFirstName(patientObj.first_name || "");
+        setLastName(patientObj.last_name || "");
+        setEmail(patientObj.email || "");
+        setCellPhone(patientObj.cell_phone || "");
+        setHomePhone(patientObj.home_phone || "");
         setBirthday(
-          p.birthday ? new Date(p.birthday).toLocaleDateString("en-US") : ""
+          patientObj.birthday
+            ? new Date(patientObj.birthday).toLocaleDateString("en-US")
+            : ""
         );
-        setStreet(p.street || "");
-        setCity(p.city || "");
-        setState(p.state || "");
-        setZip(p.zip || "");
+        setStreet(patientObj.street || "");
+        setCity(patientObj.city || "");
+        setState(patientObj.state || "");
+        setZip(patientObj.zip || "");
       }
 
       setRescheduleLoaded(true);
     };
 
     loadRescheduleData();
-  }, [rescheduleId, providerId, rescheduleLoaded]);
+  }, [rescheduleId, token, providerId, rescheduleLoaded]);
 
   // 🆕 Match patient + detect email mismatch
   async function checkEmailMismatch(): Promise<boolean> {
