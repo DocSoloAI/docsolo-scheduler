@@ -240,6 +240,29 @@ export default function SettingsTab({
     return <div className="p-4 text-gray-500">Loading settings…</div>;
   }
 
+  const bookingUrl = provider.subdomain
+    ? `https://${provider.subdomain}.bookthevisit.com`
+    : "";
+
+  const bookNowEmbedCode = bookingUrl
+    ? `<a href="${bookingUrl}" target="_blank" rel="noopener noreferrer" style="display:inline-block;background:#28a745;color:#ffffff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:600;font-family:Arial,sans-serif;">Book Now</a>`
+    : "";
+
+  const copyToClipboard = async (text: string, successMessage: string) => {
+    if (!text) {
+      toast.error("No booking link found.");
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success(successMessage);
+    } catch (err) {
+      console.error("❌ Copy failed:", err);
+      toast.error("Could not copy to clipboard.");
+    }
+  };
+
   return (
     <div className="max-w-2xl space-y-8">
       {/* ======================= */}
@@ -406,6 +429,74 @@ export default function SettingsTab({
               Your booking subdomain is locked after signup to protect your
               patient booking link.
             </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Booking Link & Website Button */}
+      <div className="space-y-4 border-t border-gray-200 pt-4">
+        <div>
+          <h4 className="text-sm font-semibold text-gray-800">
+            Booking Link & Website Button
+          </h4>
+          <p className="text-xs text-gray-500 mt-1 leading-relaxed">
+            Use these to add online scheduling to your existing website, emails, or
+            social media pages.
+          </p>
+        </div>
+
+        {/* Direct Booking Link */}
+        <div className="space-y-2">
+          <label className="block text-sm font-medium text-gray-700">
+            Direct Booking Link
+          </label>
+
+          <div className="flex gap-2">
+            <Input
+              value={bookingUrl}
+              disabled
+              className="bg-gray-100 text-gray-700 font-mono text-sm"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() =>
+                copyToClipboard(bookingUrl, "Booking link copied ✅")
+              }
+            >
+              Copy
+            </Button>
+          </div>
+        </div>
+
+        {/* Website Button Code */}
+        <div className="space-y-2">
+          <label className="block text-sm font-medium text-gray-700">
+            “Book Now” Button Code
+          </label>
+
+          <textarea
+            value={bookNowEmbedCode}
+            readOnly
+            rows={4}
+            className="w-full rounded-md border border-gray-300 bg-gray-100 p-3 text-xs font-mono text-gray-700"
+          />
+
+          <div className="flex justify-between items-start gap-3">
+            <p className="text-xs text-gray-500 leading-relaxed">
+              Copy and paste this HTML into your website to show a clickable Book Now
+              button.
+            </p>
+
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() =>
+                copyToClipboard(bookNowEmbedCode, "Book Now button code copied ✅")
+              }
+            >
+              Copy Code
+            </Button>
           </div>
         </div>
       </div>

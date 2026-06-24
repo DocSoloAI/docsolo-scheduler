@@ -10,7 +10,6 @@ import { parse } from "date-fns";
 import { getSubdomain } from "@/lib/getSubdomain";
 import { sendTemplatedEmail } from "@/lib/email/sendTemplatedEmail";
 import { useSettings } from "@/context/SettingsContext";
-import { upsertPatientAndCreateAppointment } from "@/lib/db";
 import { toast } from "react-hot-toast";
 import { fromUTCToTZ, fromTZToUTC, formatInTZ } from "@/utils/timezone";
 
@@ -880,30 +879,48 @@ export default function BookingPage() {
         appointmentId = rescheduleId;
         manageToken = existingAppt?.manage_token ?? null;
       } else {
-        // 🆕 Use helper for patient upsert + appointment insert
-        const newAppt = await upsertPatientAndCreateAppointment(
-          {
-            first_name: firstName,
-            last_name: lastName,
-            email: normalizedEmail,
-            cell_phone: cellPhone,
-            provider_id: providerId,
+        // 🆕 Create booking through secure Supabase Edge Function
+        const { data, error } = await supabase.functions.invoke("createBooking", {
+          body: {
+            patient: {
+              first_name: firstName,
+              last_name: lastName,
+              email: normalizedEmail,
+              cell_phone: cellPhone,
+              provider_id: providerId,
 
-            // ✅ New consent flags
-            allow_text: allowText,
+              // ✅ Consent flags
+              allow_text: allowText,
+              allow_email: true,
+            },
+            appointment: {
+              service_id: serviceId,
+              start_time: startUTC,
+              end_time: endUTC,
+              status: "booked",
+              patient_note: comments || null,
+            },
           },
-          {
-            service_id: serviceId,
-            start_time: fromTZToUTC(start, providerTimezone).toISOString(),
-            end_time: fromTZToUTC(end, providerTimezone).toISOString(),
-            status: "booked",
-            patient_note: comments || null,
-          }
-        );
+        });
+
+        if (error) {
+          throw error;
+        }
+
+        if (data?.error) {
+          throw new Error(data.error);
+        }
+
+        const newAppt = data?.appointment;
+
+        if (!newAppt) {
+          throw new Error("Booking function did not return an appointment.");
+        }
 
         appointmentId = newAppt.id;
-        manageToken = newAppt.manage_token; // ✅ capture token
-        let existingAllowText = newAppt.existingPatientAllowText;
+        manageToken = newAppt.manage_token;
+
+        const existingAllowText = data.existingPatientAllowText;
 
         // 🧠 If returning patient has never opted into text reminders, prompt once
         if (existingAllowText === null) {
