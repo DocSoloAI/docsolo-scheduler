@@ -849,36 +849,48 @@ export default function BookingPage() {
       let previousTime = "";
 
       if (rescheduleId) {
-        // First fetch the existing appointment so we know what date/time is being changed
-        const { data: existingAppt, error: existingApptError } = await supabase
-          .from("appointments")
-          .select("start_time, manage_token")
-          .eq("id", rescheduleId)
-          .single();
+        if (!token) {
+          throw new Error("Missing appointment management token.");
+        }
 
-        if (existingApptError) throw existingApptError;
+        const { data, error } = await supabase.functions.invoke("rescheduleBooking", {
+          body: {
+            appointmentId: rescheduleId,
+            manageToken: token,
+            providerId,
+            serviceId,
+            startTime: startUTC,
+            endTime: endUTC,
+          },
+        });
 
-        if (existingAppt?.start_time) {
-          const previousStartLocal = fromUTCToTZ(existingAppt.start_time, providerTimezone);
+        if (error) {
+          throw error;
+        }
+
+        if (data?.error) {
+          throw new Error(data.error);
+        }
+
+        const updatedAppt = data?.appointment;
+
+        if (!updatedAppt) {
+          throw new Error("Reschedule function did not return an appointment.");
+        }
+
+        if (data?.previousStartTime) {
+          const previousStartLocal = fromUTCToTZ(
+            data.previousStartTime,
+            providerTimezone
+          );
           previousDate = format(previousStartLocal, "MMMM d, yyyy");
           previousTime = format(previousStartLocal, "h:mm a");
         }
 
-        const { error: updateError } = await supabase
-          .from("appointments")
-          .update({
-            service_id: serviceId,
-            start_time: fromTZToUTC(start, providerTimezone).toISOString(),
-            end_time: fromTZToUTC(end, providerTimezone).toISOString(),
-            status: "booked",
-          })
-          .eq("id", rescheduleId);
-
-        if (updateError) throw updateError;
-
-        appointmentId = rescheduleId;
-        manageToken = existingAppt?.manage_token ?? null;
+        appointmentId = updatedAppt.id;
+        manageToken = updatedAppt.manage_token ?? token;
       } else {
+
         // 🆕 Create booking through secure Supabase Edge Function
         const { data, error } = await supabase.functions.invoke("createBooking", {
           body: {

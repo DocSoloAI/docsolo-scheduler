@@ -218,8 +218,8 @@ export default function ManageAppointmentPage() {
   };
 
   const handleReschedule = () => {
-    if (!appointment) return;
-    navigate(`/?reschedule=${appointment.id}`);
+    if (!appointment || !token) return;
+    navigate(`/booking?reschedule=${appointment.id}&token=${token}`);
   };
 
   if (!appointmentId || !token) {
