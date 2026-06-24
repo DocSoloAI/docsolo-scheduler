@@ -351,16 +351,33 @@ export default function BookingPage() {
       const startOfDayUTC = fromTZToUTC(localCopyStart, providerTimezone);
       const endOfDayUTC = fromTZToUTC(localCopyEnd, providerTimezone);
 
-      // --- Fetch appointments ---
-      const { data: appts } = await supabase
-        .from("appointments")
-        .select("id, start_time, end_time, status")
-        .eq("provider_id", providerId)
-        .eq("status", "booked")
-        .gte("start_time", startOfDayUTC.toISOString())
-        .lte("end_time", endOfDayUTC.toISOString());
+      // --- Fetch booked appointment blocks securely ---
+      const { data: availabilityData, error: availabilityErr } =
+        await supabase.functions.invoke("getBookingAvailability", {
+          body: {
+            providerId,
+            startOfDayUTC: startOfDayUTC.toISOString(),
+            endOfDayUTC: endOfDayUTC.toISOString(),
+            excludeAppointmentId: rescheduleId || null,
+            manageToken: token || null,
+          },
+        });
 
       if (!isActive) return;
+
+      if (availabilityErr) {
+        console.error("❌ booking availability fetch error:", availabilityErr);
+        setAvailableTimes([]);
+        return;
+      }
+
+      if (availabilityData?.error) {
+        console.error("❌ booking availability error:", availabilityData.error);
+        setAvailableTimes([]);
+        return;
+      }
+
+      const blockedAppointmentSlots = availabilityData?.blockedSlots || [];
 
       // --- Fetch time_off (include off_date rows too) ---
       const { data: offs, error: offErr } = await supabase
@@ -480,13 +497,11 @@ export default function BookingPage() {
 
       // ✅ Combine appointments + time_off
       let bookedSlots = [
-        ...(appts || [])
-          .filter((a) => !rescheduleId || a.id !== rescheduleId)
-          .map((a) => ({
-            start: new Date(a.start_time),
-            end: new Date(a.end_time),
-            all_day: false,
-          })),
+        ...(blockedAppointmentSlots || []).map((a: any) => ({
+          start: new Date(a.start_time),
+          end: new Date(a.end_time),
+          all_day: false,
+        })),
         ...mappedOffs,
       ];
 
