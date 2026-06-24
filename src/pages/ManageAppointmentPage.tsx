@@ -93,38 +93,33 @@ export default function ManageAppointmentPage() {
   }, [appointmentId]);
 
   const handleCancel = async () => {
+    if (!appointment || !token) return;
 
-      if (!appointment) return;
+    // 🛑 Prevent duplicate cancels
+    if (appointment.status === "cancelled") {
+      toast.error("This appointment is already cancelled.");
+      return;
+    }
 
-      // 🛑 Prevent duplicate cancels
-      if (appointment.status === "cancelled") {
-        toast.error("This appointment is already cancelled.");
-        return;
-      }
-
-    const { error } = await supabase
-      .from("appointments")
-      .update({ status: "cancelled" })
-      .eq("id", appointment.id);
+    const { data, error } = await supabase.functions.invoke("cancelBooking", {
+      body: {
+        appointmentId: appointment.id,
+        manageToken: token,
+      },
+    });
 
     if (error) {
+      console.error("❌ cancelBooking function error:", error);
       toast.error("Error cancelling appointment.");
       return;
     }
 
+    if (data?.error) {
+      toast.error(data.error);
+      return;
+    }
 
-    // Fetch full details for emails
-    const { data: appt } = await supabase
-      .from("appointments")
-      .select(`
-        id,
-        start_time,
-        services ( name ),
-        patients ( first_name, last_name, email, cell_phone, home_phone ),
-        providers ( id, office_name, email, phone, street, city, state, zip )
-      `)
-      .eq("id", appointment.id)
-      .single();
+    const appt = data?.appointmentDetails;
 
     if (appt) {
       const patient = Array.isArray(appt.patients)
@@ -142,10 +137,12 @@ export default function ManageAppointmentPage() {
       const patientName = patient
         ? `${patient.first_name} ${patient.last_name}`
         : "Patient";
+
       const formattedDate = new Date(appt.start_time).toLocaleDateString(
         "en-US",
         { weekday: "long", month: "long", day: "numeric" }
       );
+
       const formattedTime = new Date(appt.start_time).toLocaleTimeString(
         "en-US",
         { hour: "numeric", minute: "2-digit" }
@@ -171,10 +168,10 @@ export default function ManageAppointmentPage() {
                 time: formattedTime,
                 service: service?.name,
                 appointmentId: appt.id,
-                subdomain: getSubdomain(), // 👈 NEW — used in template for booking link
+                subdomain: getSubdomain(),
                 providerName: provider?.office_name,
                 providerPhone: provider?.phone,
-                location: [provider.street, provider.city, provider.state, provider.zip]
+                location: [provider?.street, provider?.city, provider?.state, provider?.zip]
                   .filter(Boolean)
                   .join(", "),
               },
@@ -182,8 +179,6 @@ export default function ManageAppointmentPage() {
           }
         );
       }
-
-
 
       // Provider cancellation notification (Edge Function)
       if (providerEmail) {
