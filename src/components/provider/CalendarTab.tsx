@@ -283,6 +283,7 @@ export default function CalendarTab({ providerId }: { providerId: string }) {
 
   const [saving, setSaving] = useState(false);
   const [sendUpdateEmail, setSendUpdateEmail] = useState(true);
+  const sendUpdateEmailRef = useRef(true);
   const [seriesDeleteOpen, setSeriesDeleteOpen] = useState(false);
   const [pendingGroupId, setPendingGroupId] = useState<string | null>(null);
   const calendarRef = useRef<any>(null);
@@ -679,6 +680,7 @@ async function loadAvailabilityOverrides() {
     setIsTimeOff(false);
     setIsAvailability(false);
     setSendUpdateEmail(true);
+    sendUpdateEmailRef.current = true;
 
     // 🧩 Reset repeating + time-off fields
     setIsRepeating(false);
@@ -893,10 +895,12 @@ async function loadAvailabilityOverrides() {
                   minute: "2-digit",
                 })
               : "";
-            await sendDualEmail("update", providerId, updated, {
-              previousDate,
-              previousTime,
-            });
+            if (sendUpdateEmailRef.current) {
+              await sendDualEmail("update", providerId, updated, {
+                previousDate,
+                previousTime,
+              });
+            }
           }
           toast.success("Appointment moved ✅");
         } catch (err: any) {
@@ -979,10 +983,12 @@ async function loadAvailabilityOverrides() {
                 })
               : "";
 
-            await sendDualEmail("update", providerId, updated, {
-              previousDate,
-              previousTime,
-            });
+            if (sendUpdateEmailRef.current) {
+              await sendDualEmail("update", providerId, updated, {
+                previousDate,
+                previousTime,
+              });
+            }
           }          
           toast.success("Appointment resized ✅");
         } catch (err: any) {
@@ -2454,21 +2460,36 @@ if (loading) return <div className="p-4 text-gray-500">Loading calendar…</div>
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent onOpenAutoFocus={(e) => e.preventDefault()}>
           <DialogHeader>
-            <DialogTitle>Confirm Action</DialogTitle>
+            <DialogTitle>Confirm Appointment Change</DialogTitle>
             <DialogDescription>{confirmMessage}</DialogDescription>
           </DialogHeader>
+
+          <div className="pt-3">
+            <label className="flex items-start gap-2 text-sm text-gray-600">
+              <input
+                type="checkbox"
+                checked={sendUpdateEmail}
+                onChange={(e) => {
+                  setSendUpdateEmail(e.target.checked);
+                  sendUpdateEmailRef.current = e.target.checked;
+                }}
+                className="mt-0.5 h-4 w-4 rounded border-gray-300 text-blue-600"
+              />
+              <span>Send patient and provider emails for this appointment change</span>
+            </label>
+          </div>
+
           <div className="flex justify-end gap-2 pt-4">
             <Button variant="outline" onClick={() => setConfirmOpen(false)}>
               Cancel
             </Button>
             <Button
-              variant="destructive"
               onClick={() => {
                 if (confirmAction) confirmAction();
                 setConfirmOpen(false);
               }}
             >
-              Confirm
+              Confirm Change
             </Button>
           </div>
         </DialogContent>
