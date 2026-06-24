@@ -36,37 +36,46 @@ export default function ManageAppointmentPage() {
   const [canceling, setCanceling] = useState(false);
 
   useEffect(() => {
-    if (!appointmentId) return;
+    if (!appointmentId || !token) {
+      setLoading(false);
+      return;
+    }
 
     const fetchAppointment = async () => {
-      const { data, error } = await supabase
-        .from("appointments")
-        .select(
-          `
-          id,
-          status,
-          start_time,
-          patients ( first_name, last_name ),
-          providers ( office_name, street, city, state, zip, phone, email, id ),
-          services ( name )
-        `
-        )
-        .eq("id", appointmentId)
-        .eq("manage_token", token) 
-        .single();
+      const { data, error } = await supabase.functions.invoke(
+        "getManagedAppointment",
+        {
+          body: {
+            appointmentId,
+            manageToken: token,
+          },
+        }
+      );
 
       if (error) {
         console.error("Error fetching appointment:", error.message);
-      } else if (data) {
-        const patient = Array.isArray(data.patients)
-          ? data.patients[0]
-          : data.patients;
-        const provider = Array.isArray(data.providers)
-          ? data.providers[0]
-          : data.providers;
-        const service = Array.isArray(data.services)
-          ? data.services[0]
-          : data.services;
+        setLoading(false);
+        return;
+      }
+
+      if (data?.error) {
+        console.error("Error fetching appointment:", data.error);
+        setLoading(false);
+        return;
+      }
+
+      const managedAppointment = data?.appointment;
+
+      if (managedAppointment) {
+        const patient = Array.isArray(managedAppointment.patients)
+          ? managedAppointment.patients[0]
+          : managedAppointment.patients;
+        const provider = Array.isArray(managedAppointment.providers)
+          ? managedAppointment.providers[0]
+          : managedAppointment.providers;
+        const service = Array.isArray(managedAppointment.services)
+          ? managedAppointment.services[0]
+          : managedAppointment.services;
 
         const location = provider
           ? [provider.street, provider.city, provider.state, provider.zip]
@@ -75,22 +84,23 @@ export default function ManageAppointmentPage() {
           : "Unknown";
 
         setAppointment({
-          id: data.id,
-          status: data.status,
+          id: managedAppointment.id,
+          status: managedAppointment.status,
           patient_name: patient
             ? `${patient.first_name} ${patient.last_name}`
             : "Unknown",
           provider_name: provider?.office_name || "Unknown",
           service_name: service?.name || "Unknown",
-          start_time: data.start_time,
+          start_time: managedAppointment.start_time,
           location,
         });
       }
+
       setLoading(false);
     };
 
     fetchAppointment();
-  }, [appointmentId]);
+  }, [appointmentId, token]);
 
   const handleCancel = async () => {
     if (!appointment || !token) return;
