@@ -60,12 +60,18 @@ export default function SignUpForm() {
       return;
     }
 
-    const { data: existing } = await supabase
-      .from("providers")
-      .select("id")
-      .eq("subdomain", cleanSub);
+    const { data: subdomainCheck, error: subdomainError } =
+      await supabase.functions.invoke("checkSubdomainAvailable", {
+        body: { subdomain: cleanSub },
+      });
 
-    if (existing && existing.length > 0) {
+    if (subdomainError) {
+      setError("Could not check subdomain availability. Please try again.");
+      setLoading(false);
+      return;
+    }
+
+    if (!subdomainCheck?.available) {
       setError("That subdomain is already taken.");
       setLoading(false);
       return;
