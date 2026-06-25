@@ -323,6 +323,7 @@ export default function BookingPage() {
             providerId,
             startOfDayUTC: startOfDayUTC.toISOString(),
             endOfDayUTC: endOfDayUTC.toISOString(),
+            selectedDateISO: selectedDate.toISOString().slice(0, 10),
             excludeAppointmentId: rescheduleId || null,
             manageToken: token || null,
           },
@@ -344,30 +345,9 @@ export default function BookingPage() {
 
       const blockedAppointmentSlots = availabilityData?.blockedSlots || [];
 
-      // --- Fetch time_off (include off_date rows too) ---
-      const { data: offs, error: offErr } = await supabase
-        .from("time_off")
-        .select("start_time, end_time, all_day, reason, off_date")
-        .eq("provider_id", providerId)
-        .or(
-          `off_date.eq.${selectedDate.toISOString().slice(0, 10)},and(start_time.lte.${endOfDayUTC.toISOString()},end_time.gte.${startOfDayUTC.toISOString()})`
-        );
-
-      if (offErr) {
-        console.error("❌ time_off fetch error:", offErr);
-      }
-      if (offErr) return; // 🚫 stop if the query failed
-
-      // --- Fetch availability overrides ---
-      const { data: overrides, error: overErr } = await supabase
-        .from("availability_overrides")
-        .select("start_time, end_time, is_active")
-        .eq("provider_id", providerId)
-        .eq("is_active", true);
-
-      if (overErr) {
-        console.error("❌ overrides fetch error:", overErr);
-      }
+      // --- Use server-side booking block data ---
+      const offs = availabilityData?.timeOffRows || [];
+      const overrides = availabilityData?.availabilityOverrides || [];
 
       if (!isActive) return;
 

@@ -34,6 +34,7 @@ serve(async (req: Request) => {
       providerId,
       startOfDayUTC,
       endOfDayUTC,
+      selectedDateISO,
       excludeAppointmentId,
       manageToken,
     } = body;
@@ -88,31 +89,60 @@ serve(async (req: Request) => {
       verifiedExcludeAppointmentId = managedAppointment.id;
     }
 
-    const query = supabaseAdmin
-      .from("appointments")
-      .select("id, start_time, end_time")
-      .eq("provider_id", providerId)
-      .eq("status", "booked")
-      // Proper overlap logic:
-      // appointment starts before day ends AND ends after day starts
-      .lt("start_time", endOfDayUTC)
-      .gt("end_time", startOfDayUTC);
+    const selectedDate =
+      selectedDateISO || new Date(startOfDayUTC).toISOString().slice(0, 10);
 
-    const { data: appointments, error } = await query;
+    const [appointmentsRes, timeOffRes, overridesRes] = await Promise.all([
+      supabaseAdmin
+        .from("appointments")
+        .select("id, start_time, end_time")
+        .eq("provider_id", providerId)
+        .eq("status", "booked")
+        // Proper overlap logic:
+        // appointment starts before day ends AND ends after day starts
+        .lt("start_time", endOfDayUTC)
+        .gt("end_time", startOfDayUTC),
 
-    if (error) throw error;
+      supabaseAdmin
+        .from("time_off")
+        .select("start_time, end_time, all_day, reason, off_date")
+        .eq("provider_id", providerId)
+        .or(
+          `off_date.eq.${selectedDate},and(start_time.lte.${endOfDayUTC},end_time.gte.${startOfDayUTC})`
+        ),
 
-    const blockedSlots = (appointments || [])
+      supabaseAdmin
+        .from("availability_overrides")
+        .select("start_time, end_time, is_active")
+        .eq("provider_id", providerId)
+        .eq("is_active", true)
+        .lt("start_time", endOfDayUTC)
+        .gt("end_time", startOfDayUTC),
+    ]);
+
+    if (appointmentsRes.error) throw appointmentsRes.error;
+    if (timeOffRes.error) throw timeOffRes.error;
+    if (overridesRes.error) throw overridesRes.error;
+
+    const blockedSlots = (appointmentsRes.data || [])
       .filter((appt) => appt.id !== verifiedExcludeAppointmentId)
       .map((appt) => ({
         start_time: appt.start_time,
         end_time: appt.end_time,
       }));
 
-    return new Response(JSON.stringify({ blockedSlots }), {
-      status: 200,
-      headers: corsHeaders,
-    });
+    return new Response(
+      JSON.stringify({
+        blockedSlots,
+        timeOffRows: timeOffRes.data || [],
+        availabilityOverrides: overridesRes.data || [],
+      }),
+      {
+        status: 200,
+        headers: corsHeaders,
+      }
+    );
+
   } catch (err) {
     console.error("❌ getBookingAvailability error:", err);
 
