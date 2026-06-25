@@ -21,18 +21,25 @@ function BookingWithProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     async function fetchProvider() {
       if (!subdomain) return;
-      const { data, error } = await supabase
-        .from("providers")
-        .select("id")
-        .eq("subdomain", subdomain)
-        .single();
 
-      if (error) {
-        console.error("❌ Provider lookup failed:", error.message);
-      } else if (data) {
-        setProviderId(data.id);
+      const { data, error } = await supabase.functions.invoke(
+        "getPublicProvider",
+        {
+          body: { subdomain },
+        }
+      );
+
+      if (error || !data?.provider?.id) {
+        console.error(
+          "❌ Provider lookup failed:",
+          error?.message || "Provider not found"
+        );
+        return;
       }
+
+      setProviderId(data.provider.id);
     }
+
     fetchProvider();
   }, [subdomain]);
 
