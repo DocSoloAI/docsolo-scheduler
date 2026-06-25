@@ -84,7 +84,8 @@ serve(async (req: Request) => {
           state,
           zip,
           announcement,
-          logo_url
+          logo_url,
+          timezone
         ),
         services (
           name
@@ -128,13 +129,17 @@ serve(async (req: Request) => {
 
     const appointmentDate = new Date(appointment.start_time);
 
+    const providerTimezone = provider?.timezone || "America/New_York";
+
     const formattedDate = appointmentDate.toLocaleDateString("en-US", {
+      timeZone: providerTimezone,
       month: "long",
       day: "numeric",
       year: "numeric",
     });
 
     const formattedTime = appointmentDate.toLocaleTimeString("en-US", {
+      timeZone: providerTimezone,
       hour: "numeric",
       minute: "2-digit",
     });
