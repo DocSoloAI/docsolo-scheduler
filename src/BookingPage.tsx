@@ -16,7 +16,6 @@ import { fromUTCToTZ, fromTZToUTC, formatInTZ } from "@/utils/timezone";
 export default function BookingPage() {
   const { services } = useSettings();
   const [providerId, setProviderId] = useState<string | null>(null);
-  const [providerEmail, setProviderEmail] = useState<string | null>(null);
   const [providerLoaded, setProviderLoaded] = useState(false);
 
   const [providerOfficeName, setProviderOfficeName] = useState<string>("");
@@ -121,10 +120,6 @@ export default function BookingPage() {
       const provider = data.provider;
 
       setProviderId(provider.id);
-
-      // Public provider lookup intentionally does NOT return provider email.
-      // Provider notification emails are handled server-side by Edge Functions.
-      setProviderEmail(null);
 
       setProviderOfficeName(provider.office_name || "");
       setProviderPhone(provider.phone || "");
