@@ -1437,6 +1437,8 @@ const handleDelete = async () => {
     }
 
     // ---------- 🟦 APPOINTMENT ----------
+    const shouldSendCancellationEmail = sendUpdateEmailRef.current;
+
     const { data: appt, error: fetchErr } = await supabase
       .from("appointments")
       .select(
@@ -1475,9 +1477,9 @@ const handleDelete = async () => {
         : appt.patients;
     }
 
-    if (patient?.first_name && appt?.services) {
-          await sendDualEmail("cancellation", providerId, appt);
-        }
+    if (shouldSendCancellationEmail && patient?.first_name && appt?.services) {
+      await sendDualEmail("cancellation", providerId, appt);
+    }
   } catch (err: any) {
     console.error("❌ Delete failed:", err);
     toast.error(`Error deleting: ${err.message}`);
@@ -2372,6 +2374,7 @@ if (loading) return <div className="p-4 text-gray-500">Loading calendar…</div>
                     checked={sendUpdateEmail}
                     onChange={(e) => {
                       setSendUpdateEmail(e.target.checked);
+                      sendUpdateEmailRef.current = e.target.checked;
                     }}
                     className="h-4 w-4 rounded border-gray-300 text-blue-600"
                   />
