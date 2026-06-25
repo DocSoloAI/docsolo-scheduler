@@ -264,14 +264,23 @@ export default function CalendarTab({ providerId }: { providerId: string }) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmAction, setConfirmAction] = useState<(() => void) | null>(null);
   const [confirmMessage, setConfirmMessage] = useState("");
+  const [confirmType, setConfirmType] = useState<"appointment" | "time_off">(
+    "appointment"
+  );
   const [isRepeating, setIsRepeating] = useState(false);
   const [repeatFrequency, setRepeatFrequency] = useState(1);
   const [repeatUnit, setRepeatUnit] = useState<"days" | "weeks">("weeks");
   const [repeatUntil, setRepeatUntil] = useState<string>("");
   const [timeOffReason, setTimeOffReason] = useState("");
-  const showConfirm = (message: string, action: () => void) => {
+
+  const showConfirm = (
+    message: string,
+    action: () => void,
+    type: "appointment" | "time_off" = "appointment"
+  ) => {
     setConfirmMessage(message);
     setConfirmAction(() => action);
+    setConfirmType(type);
     setConfirmOpen(true);
   };
 
@@ -907,7 +916,8 @@ async function loadAvailabilityOverrides() {
           console.error("❌ Error updating event:", err.message);
           toast.error("Error moving event: " + err.message);
         }
-      }
+      },
+      isTimeOff ? "time_off" : "appointment"
     );
   };
 
@@ -995,7 +1005,8 @@ async function loadAvailabilityOverrides() {
           console.error("❌ Error resizing event:", err.message);
           toast.error("Error resizing event: " + err.message);
         }
-      }
+      },
+      isTimeOff ? "time_off" : "appointment"
     );
   };
 
@@ -2412,7 +2423,8 @@ if (loading) return <div className="p-4 text-gray-500">Loading calendar…</div>
                           "Are you sure you want to delete this time off?",
                           async () => {
                             await handleDelete();
-                          }
+                          },
+                          "time_off"
                         );
                       }
                     } catch (err: any) {
@@ -2460,24 +2472,30 @@ if (loading) return <div className="p-4 text-gray-500">Loading calendar…</div>
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent onOpenAutoFocus={(e) => e.preventDefault()}>
           <DialogHeader>
-            <DialogTitle>Confirm Appointment Change</DialogTitle>
+            <DialogTitle>
+              {confirmType === "time_off"
+                ? "Confirm Time-Off Change"
+                : "Confirm Appointment Change"}
+            </DialogTitle>
             <DialogDescription>{confirmMessage}</DialogDescription>
           </DialogHeader>
 
-          <div className="pt-3">
-            <label className="flex items-start gap-2 text-sm text-gray-600">
-              <input
-                type="checkbox"
-                checked={sendUpdateEmail}
-                onChange={(e) => {
-                  setSendUpdateEmail(e.target.checked);
-                  sendUpdateEmailRef.current = e.target.checked;
-                }}
-                className="mt-0.5 h-4 w-4 rounded border-gray-300 text-blue-600"
-              />
-              <span>Send patient and provider emails for this appointment change</span>
-            </label>
-          </div>
+          {confirmType === "appointment" && (
+            <div className="pt-3">
+              <label className="flex items-start gap-2 text-sm text-gray-600">
+                <input
+                  type="checkbox"
+                  checked={sendUpdateEmail}
+                  onChange={(e) => {
+                    setSendUpdateEmail(e.target.checked);
+                    sendUpdateEmailRef.current = e.target.checked;
+                  }}
+                  className="mt-0.5 h-4 w-4 rounded border-gray-300 text-blue-600"
+                />
+                <span>Send patient and provider emails for this appointment change</span>
+              </label>
+            </div>
+          )}
 
           <div className="flex justify-end gap-2 pt-4">
             <Button variant="outline" onClick={() => setConfirmOpen(false)}>
@@ -2489,7 +2507,7 @@ if (loading) return <div className="p-4 text-gray-500">Loading calendar…</div>
                 setConfirmOpen(false);
               }}
             >
-              Confirm Change
+              {confirmType === "time_off" ? "Confirm Time Off" : "Confirm Change"}
             </Button>
           </div>
         </DialogContent>
