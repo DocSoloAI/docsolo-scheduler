@@ -14,7 +14,7 @@ import { toast } from "react-hot-toast";
 import { fromUTCToTZ, fromTZToUTC, formatInTZ } from "@/utils/timezone";
 
 export default function BookingPage() {
-  const { services } = useSettings();
+  const { services, availability } = useSettings();  
   const [providerId, setProviderId] = useState<string | null>(null);
   const [providerLoaded, setProviderLoaded] = useState(false);
 
@@ -263,16 +263,16 @@ export default function BookingPage() {
 
       const dayOfWeek = selectedDate.getDay();
 
-      // --- Fetch provider availability ---
-      const { data: availRows, error: availErr } = await supabase
-        .from("availability")
-        .select("start_time, end_time, slot_interval")
-        .eq("provider_id", providerId)
-        .eq("day_of_week", dayOfWeek)
-        .eq("is_active", true);
+      // --- Use provider availability already loaded through SettingsContext ---
+      const availRows = availability.filter(
+        (row) =>
+          row.provider_id === providerId &&
+          row.day_of_week === dayOfWeek &&
+          row.is_active
+      );
 
       if (!isActive) return;
-      if (availErr || !availRows || availRows.length === 0) {
+      if (!availRows || availRows.length === 0) {
         setAvailableTimes([]);
         return;
       }
