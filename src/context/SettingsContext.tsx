@@ -33,6 +33,29 @@ export function SettingsProvider({
   const loadAll = async () => {
     setLoading(true);
 
+    if (!includePrivateData) {
+      const { data, error } = await supabase.functions.invoke(
+        "getPublicSchedulerSettings",
+        {
+          body: { providerId },
+        }
+      );
+
+      if (error) {
+        console.error("❌ Error loading public scheduler settings:", error.message);
+        setServices([]);
+        setAvailability([]);
+      } else {
+        setServices(data?.services || []);
+        setAvailability(data?.availability || []);
+      }
+
+      setPatients([]);
+      setAppointments([]);
+      setLoading(false);
+      return;
+    }
+
     const [svcRes, availRes] = await Promise.all([
       supabase
         .from("services")
@@ -50,35 +73,30 @@ export function SettingsProvider({
     if (svcRes.data) setServices(svcRes.data);
     if (availRes.data) setAvailability(availRes.data);
 
-    if (includePrivateData) {
-      const [patRes, apptRes] = await Promise.all([
-        supabase
-          .from("patients")
-          .select("id, first_name, last_name, email, cell_phone")
-          .eq("provider_id", providerId),
+    const [patRes, apptRes] = await Promise.all([
+      supabase
+        .from("patients")
+        .select("id, first_name, last_name, email, cell_phone")
+        .eq("provider_id", providerId),
 
-        supabase
-          .from("appointments")
-          .select(
-            `
-            id,
-            start_time,
-            end_time,
-            service_id,
-            patient_id,
-            status,
-            patients:patient_id (first_name, last_name)
+      supabase
+        .from("appointments")
+        .select(
           `
-          )
-          .eq("provider_id", providerId),
-      ]);
+          id,
+          start_time,
+          end_time,
+          service_id,
+          patient_id,
+          status,
+          patients:patient_id (first_name, last_name)
+        `
+        )
+        .eq("provider_id", providerId),
+    ]);
 
-      if (patRes.data) setPatients(patRes.data);
-      if (apptRes.data) setAppointments(apptRes.data);
-    } else {
-      setPatients([]);
-      setAppointments([]);
-    }
+    if (patRes.data) setPatients(patRes.data);
+    if (apptRes.data) setAppointments(apptRes.data);
 
     setLoading(false);
   };

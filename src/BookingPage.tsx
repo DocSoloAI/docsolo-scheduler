@@ -777,15 +777,13 @@ export default function BookingPage() {
       const serviceId = service.id;
       const normalizedEmail = email.trim().toLowerCase(); // ✅ normalize once here
 
-      // 1. Get service duration
-      const { data: serviceData, error: serviceError } = await supabase
-        .from("services")
-        .select("duration_minutes")
-        .eq("id", serviceId)
-        .single();
+      // 1. Use selected service duration already loaded into the booking page
+      const durationMin = service.duration_minutes;
 
-      if (serviceError) throw serviceError;
-      const durationMin = serviceData.duration_minutes;
+      if (!durationMin) {
+        setFormError("Service duration could not be found.");
+        return false;
+      }
 
       const startLocal = parse(selectedTime!, "h:mm a", selectedDate!);
       const start = new Date(startLocal);
