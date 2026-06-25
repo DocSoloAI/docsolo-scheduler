@@ -13,6 +13,21 @@ import { useSettings } from "@/context/SettingsContext";
 import { toast } from "react-hot-toast";
 import { fromUTCToTZ, fromTZToUTC, formatInTZ } from "@/utils/timezone";
 
+const normalizeNameOnBlur = (value: string) => {
+  const trimmed = value.trim();
+
+  if (!trimmed) return "";
+
+  const hasLetters = /[a-zA-Z]/.test(trimmed);
+  const isAllCaps = trimmed === trimmed.toUpperCase() && hasLetters;
+
+  if (!isAllCaps) return trimmed;
+
+  return trimmed
+    .toLowerCase()
+    .replace(/\b[a-z]/g, (char) => char.toUpperCase());
+};
+
 export default function BookingPage() {
   const { services, availability } = useSettings();  
   const [providerId, setProviderId] = useState<string | null>(null);
@@ -271,40 +286,14 @@ export default function BookingPage() {
           row.is_active
       );
 
-      if (!isActive) return;
-      if (!availRows || availRows.length === 0) {
+      const selectedServiceData = services.find((svc) => svc.id === selectedService);
+
+      if (!selectedServiceData?.duration_minutes) {
         setAvailableTimes([]);
         return;
       }
 
-      // --- Build all possible time slots ---
-      let allSlots: { time: string; date: Date }[] = [];
-      availRows.forEach((avail) => {
-        const startLocal = new Date(selectedDate);
-        const [sh, sm] = (avail.start_time as string).split(":").map(Number);
-        startLocal.setHours(sh, sm, 0, 0);
-
-        const endLocal = new Date(selectedDate);
-        const [eh, em] = (avail.end_time as string).split(":").map(Number);
-        endLocal.setHours(eh, em, 0, 0);
-
-        const startUTC = fromTZToUTC(startLocal, providerTimezone);
-        const endUTC = fromTZToUTC(endLocal, providerTimezone);
-        const step = avail.slot_interval || 30;
-        const cur = new Date(startUTC);
-
-        while (cur < endUTC) {
-          const localTime = fromUTCToTZ(cur, providerTimezone);
-          allSlots.push({
-            time: formatInTZ(localTime, providerTimezone, "h:mm a"),
-            date: new Date(localTime),
-          });
-          cur.setMinutes(cur.getMinutes() + step);
-        }
-      });
-
-      if (!isActive) return;
-      allSlots.sort((a, b) => a.date.getTime() - b.date.getTime());
+      const selectedServiceDurationMinutes = selectedServiceData.duration_minutes;
       const now = new Date();
 
       // --- Build UTC day boundaries safely (non-mutating) ---
@@ -351,10 +340,29 @@ export default function BookingPage() {
 
       if (!isActive) return;
 
+      // ✅ Normalize regular weekly availability windows to local Date objects
+      const regularAvailabilityWindows: { start: Date; end: Date }[] = availRows.map(
+        (avail) => {
+          const startLocal = new Date(selectedDate);
+          const [sh, sm] = (avail.start_time as string).split(":").map(Number);
+          startLocal.setHours(sh, sm, 0, 0);
+
+          const endLocal = new Date(selectedDate);
+          const [eh, em] = (avail.end_time as string).split(":").map(Number);
+          endLocal.setHours(eh, em, 0, 0);
+
+          return {
+            start: startLocal,
+            end: endLocal,
+          };
+        }
+      );
+
       // ✅ Normalize overrides to local Date objects
       const mappedOverrides: { start: Date; end: Date }[] = (overrides || [])
         .map((o: any) => {
           if (!o.start_time || !o.end_time) return null;
+
           try {
             const safeStart = o.start_time.includes("T")
               ? o.start_time
@@ -365,10 +373,12 @@ export default function BookingPage() {
 
             const startUTC = new Date(safeStart);
             const endUTC = new Date(safeEnd);
+
             if (isNaN(startUTC.getTime()) || isNaN(endUTC.getTime())) return null;
 
             const start = fromUTCToTZ(startUTC.toISOString(), providerTimezone);
             const end = fromUTCToTZ(endUTC.toISOString(), providerTimezone);
+
             return { start, end };
           } catch (err) {
             console.warn("Skipping bad override:", o, err);
@@ -377,35 +387,83 @@ export default function BookingPage() {
         })
         .filter(Boolean) as { start: Date; end: Date }[];
 
-      // 🆕 Generate slots from override windows on the selected date
-      mappedOverrides.forEach((override) => {
-        const { start, end } = override;
-        const selectedDateStr = selectedDate.toDateString();
-        
-        // Check if override falls on selected date
-        if (
-          start.toDateString() !== selectedDateStr &&
-          end.toDateString() !== selectedDateStr
-        )
-          return;
+      const selectedDateStr = selectedDate.toDateString();
 
-        const step = 30; // minutes
-        const cur = new Date(start); // ✅ start is already in local time
-        
-        while (cur < end) {
-          // ✅ cur is already in local time, no need to convert
-          if (cur.toDateString() === selectedDateStr) {
+      // ✅ Combine regular hours + override windows, then merge touching/overlapping windows
+      const openWindows = [...regularAvailabilityWindows, ...mappedOverrides]
+        .filter((window) => {
+          return (
+            window.start.toDateString() === selectedDateStr ||
+            window.end.toDateString() === selectedDateStr
+          );
+        })
+        .sort((a, b) => a.start.getTime() - b.start.getTime());
+
+      const mergedOpenWindows: { start: Date; end: Date }[] = [];
+
+      openWindows.forEach((window) => {
+        const lastWindow = mergedOpenWindows[mergedOpenWindows.length - 1];
+
+        if (!lastWindow) {
+          mergedOpenWindows.push({
+            start: new Date(window.start),
+            end: new Date(window.end),
+          });
+          return;
+        }
+
+        if (window.start <= lastWindow.end) {
+          lastWindow.end = new Date(
+            Math.max(lastWindow.end.getTime(), window.end.getTime())
+          );
+        } else {
+          mergedOpenWindows.push({
+            start: new Date(window.start),
+            end: new Date(window.end),
+          });
+        }
+      });
+
+      // ✅ Build all possible slots from merged open windows
+      let allSlots: { time: string; date: Date }[] = [];
+
+      mergedOpenWindows.forEach((window) => {
+        const step = 30;
+        const cur = new Date(window.start);
+
+        while (cur < window.end) {
+          const appointmentEnd = new Date(cur);
+          appointmentEnd.setMinutes(
+            appointmentEnd.getMinutes() + selectedServiceDurationMinutes
+          );
+
+          if (
+            appointmentEnd <= window.end &&
+            cur.toDateString() === selectedDateStr
+          ) {
             allSlots.push({
               time: formatInTZ(cur, providerTimezone, "h:mm a"),
               date: new Date(cur),
             });
           }
+
           cur.setMinutes(cur.getMinutes() + step);
         }
       });
 
-      // ✅ Resort all slots (including new ones from overrides)
-      allSlots.sort((a, b) => a.date.getTime() - b.date.getTime());
+      // ✅ Sort and dedupe all slots
+      const seenSlotTimes = new Set<string>();
+
+      allSlots = allSlots
+        .sort((a, b) => a.date.getTime() - b.date.getTime())
+        .filter((slot) => {
+          const key = slot.date.getTime().toString();
+
+          if (seenSlotTimes.has(key)) return false;
+
+          seenSlotTimes.add(key);
+          return true;
+        });
 
       // ✅ Detect full-day off (supports off_date or legacy start/end)
       const hasFullDayOff = (offs || []).some((o: any) => {
@@ -472,8 +530,13 @@ export default function BookingPage() {
               b.all_day &&
               b.start &&
               b.start.toDateString() === slot.date.toDateString();
+
+            const slotEnd = new Date(slot.date);
+            slotEnd.setMinutes(slotEnd.getMinutes() + selectedServiceDurationMinutes);
+
             const overlaps =
-              b.start && b.end && slot.date >= b.start && slot.date < b.end;
+              b.start && b.end && slot.date < b.end && slotEnd > b.start;
+
             return sameDay || overlaps;
           });
         })
@@ -500,7 +563,16 @@ export default function BookingPage() {
     return () => {
       isActive = false;
     };
-  }, [providerId, selectedDate]);
+  }, [
+    providerId,
+    selectedDate,
+    providerTimezone,
+    availability,
+    services,
+    selectedService,
+    rescheduleId,
+    token,
+  ]);
 
 
   // 🔽 Refs
@@ -1369,14 +1441,15 @@ export default function BookingPage() {
                           autoComplete="given-name"
                           value={firstName}
                           onChange={(e) => {
-                            let val = e.target.value
-                              .toLowerCase()
-                              .replace(/\b\w/g, (char) => char.toUpperCase()); // capitalize each word
-                            setFirstName(val);
+                            setFirstName(e.target.value);
+                          }}
+                          onBlur={(e) => {
+                            setFirstName(normalizeNameOnBlur(e.target.value));
                           }}
                           required
                         />
                       </div>
+
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
                           Last Name <span className="text-red-500">*</span>
@@ -1386,16 +1459,15 @@ export default function BookingPage() {
                           autoComplete="family-name"
                           value={lastName}
                           onChange={(e) => {
-                            let val = e.target.value
-                              .toLowerCase()
-                              .replace(/\b\w/g, (char) => char.toUpperCase());
-                            setLastName(val);
+                            setLastName(e.target.value);
+                          }}
+                          onBlur={(e) => {
+                            setLastName(normalizeNameOnBlur(e.target.value));
                           }}
                           required
                         />
                       </div>
                     </div>
-
                     {/* Row 2: Email (always) + DOB (new patients only) */}
                     <div className="grid md:grid-cols-2 gap-4">
 
