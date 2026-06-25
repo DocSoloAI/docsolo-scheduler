@@ -107,21 +107,25 @@ export default function BookingPage() {
       const subdomain = getSubdomain();
       if (!subdomain) return;
 
-      const { data: provider, error } = await supabase
-        .from("providers")
-        .select("id, email, office_name, phone, street, city, state, zip, announcement, logo_url, timezone")
-        .eq("subdomain", subdomain)
-        .single();
+      const { data, error } = await supabase.functions.invoke("getPublicProvider", {
+        body: { subdomain },
+      });
 
-      if (error || !provider) {
-        console.error("Provider not found:", error);
+      if (error || !data?.provider) {
+        console.error("Provider not found:", error || data?.error);
         setProviderOfficeName("ERROR_NOT_FOUND");
         setProviderLoaded(true);
         return;
       }
 
+      const provider = data.provider;
+
       setProviderId(provider.id);
-      setProviderEmail(provider.email);
+
+      // Public provider lookup intentionally does NOT return provider email.
+      // Provider notification emails are handled server-side by Edge Functions.
+      setProviderEmail(null);
+
       setProviderOfficeName(provider.office_name || "");
       setProviderPhone(provider.phone || "");
       setProviderAnnouncement(provider.announcement || "");
@@ -134,7 +138,7 @@ export default function BookingPage() {
       if (provider?.timezone) setProviderTimezone(provider.timezone);
 
       setProviderLoaded(true);
-    };    
+    };
 
     loadProvider();
   }, []);
@@ -951,62 +955,42 @@ export default function BookingPage() {
       });
 
       // Provider email
-      if (providerEmail) {
-        // 🔍 LOG EXACT VALUES THAT WILL BE SENT
-        console.log("📨 PROVIDER EMAIL appointmentData =", {
-          street,
-          city,
-          state,
-          zip,
-          primaryInsurance,
-          primaryID,
-          secondaryInsurance,
-          secondaryID,
-          patientNote: comments,
-          previousDate,
-          previousTime,
-        });
+      // 🔒 Provider email is now sent server-side so the provider email address
+      // is not exposed to the public booking page.
+      try {
+        const { error: providerEmailError } = await supabase.functions.invoke(
+          "sendProviderBookingEmail",
+          {
+            body: {
+              appointmentId,
+              providerId,
+              templateType: rescheduleId
+                ? "provider_update"
+                : "provider_confirmation",
 
-        await sendTemplatedEmail({
-          templateType: rescheduleId
-            ? "provider_update"
-            : "provider_confirmation",
-          to: providerEmail,
-          providerId,
-          appointmentData: {
-            patientName: fullName,
-            patientEmail: normalizedEmail,
-            patientPhone: cellPhone || "(no phone provided)",
+              // Previous appointment date/time, only populated during reschedule
+              previousDate,
+              previousTime,
 
-            // New appointment date/time
-            date: formattedDate,
-            time: formattedTime,
+              // Intake details for provider-only notification
+              patientNote: comments || "",
+              street,
+              city,
+              state,
+              zip,
+              primaryInsurance,
+              primaryID,
+              secondaryInsurance,
+              secondaryID,
+            },
+          }
+        );
 
-            // Previous appointment date/time, only populated during reschedule
-            previousDate,
-            previousTime,
-
-            service: service.name,
-            appointmentId,
-            patientNote: comments || "",
-
-            // 🆕 FULL INTAKE INFO FOR PROVIDER ONLY (FIXED: FLATTENED)
-            street,
-            city,
-            state,
-            zip,
-            primaryInsurance,
-            primaryID,
-            secondaryInsurance,
-            secondaryID,
-
-            manageLink: "",
-            officeName: providerOfficeName,
-            providerPhone,
-            announcement: providerAnnouncement,
-            logoUrl: providerLogoUrl,
-          },
-        });
+        if (providerEmailError) {
+          console.warn("⚠️ Provider email failed:", providerEmailError.message);
+        }
+      } catch (err: any) {
+        console.warn("⚠️ Provider email failed:", err?.message || err);
       }
 
       // 3. Mark confirmed
