@@ -1,6 +1,6 @@
 // supabase/functions/_shared/sendTemplatedEmail.ts
 // @ts-nocheck
-import { supabase } from "./supabaseClient.ts";
+import { supabaseAdmin as supabase } from "./supabaseAdminClient.ts";
 
 interface AppointmentData {
   patientName: string;
